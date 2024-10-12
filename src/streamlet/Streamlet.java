@@ -40,8 +40,8 @@ public class Streamlet {
 				int outPort = Integer.parseInt(p);
 				
 				// Send messages to other nodes (client side)
-		        Thread clientThread = new Thread(new NodeClient(ip, outPort));
-		        clientThread.start();
+		        //Thread clientThread = new Thread(new NodeClient(ip, outPort));
+		        //clientThread.start();
 				
 				break;
 			}
