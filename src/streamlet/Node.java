@@ -10,80 +10,108 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 public class Node {
-    private static Set<String> connectedNodes = new HashSet<>();
 
-    private static String[] addresses;
-    private static int epochDurationSec;
-    private static int seed;
-    private static int id;
-    
-    private static String selfServerAddress;
-    
-    public static void main(String[] args) {
-        if (args.length < 1 || args.length > 2) {
-        	System.out.println("Usage: java Node <configFilePath> <peersFilePath> <nodeId>");
-//            System.out.println("Usage: java Node <selfPort> [<targetHost:targetPort>]");
-            return;
-        }
+	private static int nodeId;
+	private static String selfAddress;
+	private static int selfPort;
+	private static Set<String> connectedNodes = new HashSet<>(); // Set of connected nodes as "id ip:port"
+	private static HashMap<Integer, String> allNodes = new HashMap<Integer, String>(); // List of all nodes read from
+																						// file
+	private static String startTime; // Configured start time for connections
+	private static int seed;
+	private static int epochDurationSec;
 
-        String configFilePath = args[0];
-        String peersFilePath = args[1];
-        id = Integer.parseInt(args[2]);
+	public static void main(String[] args) {
+		if (args.length != 3) {
+			System.out.println("Usage: java Node <id> <nodesFile> <configFile>");
+			return;
+		}
 
-        readConfig(configFilePath, peersFilePath);
-        
-//        int selfPort = Integer.parseInt(args[0]);
-//        String selfAddress = "127.0.0.1:" + selfPort; // Test local host needs to change
-//
-//        connectedNodes.add(selfAddress);
-//        System.out.println("\n**Main**");
-//        printConnectedNodes();
+		nodeId = Integer.parseInt(args[0]);
+		String nodesFile = args[1];
+		String configFile = args[2];
 
-        NodeServer server = new NodeServer(selfAddress, connectedNodes);
-        Thread serverThread = new Thread(server);
-        serverThread.start();
+		if (!readNodesFile(nodesFile) || !readConfigFile(configFile)) {
+			return;
+		}
 
-        // If on connection mode
-        if (args.length > 1) {
-            String[] targetInfo = args[1].split(":");
-            if (targetInfo.length == 2) {
-                String targetHost = targetInfo[0];
-                int targetPort = Integer.parseInt(targetInfo[1]);
+		NodeServer server = new NodeServer(selfAddress);
+		Thread serverThread = new Thread(server);
+		serverThread.start();
 
-                // Start the client thread to connect to the target node
-                connectToNode(targetHost, targetPort, selfAddress);
-            } else {
-                System.out.println("Invalid target format. Use <targetHost:targetPort>.");
-            }
-        } else {
-            System.out.println("No target node specified. Running in server-only mode.");
-        }
-    }
-    
-    private static int readConfig(String configName, String peersName) {
-    	File configFile = new File(configName);
-    	File peersFile = new File(peersName);
-    	
-    	if(!configFile.exists()) {
-    		System.out.println("No config file was found with name " + configName);
-    		return -1;
-    	}
-    	
-    	if(!peersFile.exists()) {
-    		System.out.println("No peer file was found with name " + peersName);
-    		return -1;
-    	}
-    	
-    	try {
-			BufferedReader br = new BufferedReader(new FileReader(configFile));
+		waitForStartTime();
+
+		// Start the client thread to connect to the target node
+		connectToNode();
+	}
+
+	private static void waitForStartTime() {
+		try {
+			SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+			Date targetTime = dateFormat.parse(startTime);
+			Date currentTime = new Date();
+
+			long waitTime = targetTime.getTime() - currentTime.getTime();
+			if (waitTime > 0) {
+				System.out.println("Waiting until start time: " + startTime);
+				TimeUnit.MILLISECONDS.sleep(waitTime);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+
+	private static boolean readNodesFile(String nodesFile) {
+		File file = new File(nodesFile);
+
+		if (!file.exists()) {
+			System.out.println("No config file was found with name " + nodesFile);
+			return false;
+		}
+
+		try {
+			BufferedReader br = new BufferedReader(new FileReader(file));
 			String line;
-			while((line = br.readLine()) != null) {
+			while ((line = br.readLine()) != null) {
+				String[] args = line.split(" ");
+				if (Integer.parseInt(args[0]) == nodeId) {
+					selfAddress = args[1];
+
+				}
+				allNodes.put(Integer.parseInt(args[0]), args[1]);
+
+			}
+		} catch (IOException e) {
+			System.out.println("Error trying to read nodes file");
+			return false;
+		}
+		return true;
+	}
+
+	private static boolean readConfigFile(String configFile) {
+		File file = new File(configFile);
+
+		if (!file.exists()) {
+			System.out.println("No config file was found with name " + configFile);
+			return false;
+		}
+
+		try {
+			BufferedReader br = new BufferedReader(new FileReader(file));
+			String line;
+			while ((line = br.readLine()) != null) {
 				String[] args = line.split("=");
-				
+
 				switch (args[0]) {
 				case "seed":
 					seed = Integer.parseInt(args[1]);
@@ -92,46 +120,33 @@ public class Node {
 				case "epoch_time_sec":
 					epochDurationSec = Integer.parseInt(args[1]);
 					break;
+
+				case "start_time":
+					startTime = args[1];
+					break;
+
 				}
 			}
 		} catch (IOException e) {
 			System.out.println("Error trying to read config file");
-			e.printStackTrace();
+			return false;
 		}
-    	
-    	try {
-			BufferedReader br = new BufferedReader(new FileReader(peersFile));
-			String line;
-			while((line = br.readLine()) != null) {
-				String[] args = line.split(" ");
-				if(Integer.parseInt(args[0]) == id) {
-					selfServerAddress = args[1] + ":" + args[2];
-				}
-				
-			}
-		} catch (IOException e) {
-			System.out.println("Error trying to read config file");
-			e.printStackTrace();
+
+		return true;
+	}
+
+	public static void connectToNode() {
+		
+		for (Integer id : allNodes.keySet()) {
+			String nodeAddress = allNodes.get(id);
+			NodeClient client = new NodeClient(nodeAddress, "CONNECT_REQUEST" + " " + selfAddress);
+			Thread clientThread = new Thread(client);
+			clientThread.start();
 		}
-    	
-    	return 0;
-    }
+		
 
-    public static void connectToNode(String host, int port, String selfAddress) {
-        String nodeAddress = host + ":" + port;
-        if (connectedNodes.contains(nodeAddress)) {
-            System.out.println("Already connected to " + nodeAddress);
-            return;
-        }
 
-        NodeClient client = new NodeClient(host, port, "CONNECT_REQUEST" + " " + selfAddress, connectedNodes);
-        Thread clientThread = new Thread(client);
-        clientThread.start();
+		// connectedNodes.add(nodeAddress);
+	}
 
-        //connectedNodes.add(nodeAddress);
-    }
-    
-    public static void printConnectedNodes() {
-    	System.out.println("\n=================================================\n" + connectedNodes.toString() + "\n=================================================\n");
-    }
 }
