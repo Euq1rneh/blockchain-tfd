@@ -4,14 +4,22 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.util.HashMap;
+import java.util.Map;
+
+import broadcast.BroadcastManager;
+import datastructures.Message;
+import datastructures.MessageType;
 
 class ClientHandler implements Runnable {
     private Socket clientSocket;
-    private String selfAddress;
-
-    public ClientHandler(Socket socket, String selfAddress) {
+    private BroadcastManager bm;
+    private HashMap<Integer, Socket> connectedNodes;
+    
+    public ClientHandler(Socket socket, BroadcastManager bm, HashMap<Integer, Socket> connectedNodes) {
         this.clientSocket = socket;
-        this.selfAddress = selfAddress;
+        this.bm = bm;
+        this.connectedNodes = connectedNodes;
     }
 
     @Override
@@ -19,19 +27,25 @@ class ClientHandler implements Runnable {
         try (ObjectInputStream in = new ObjectInputStream(clientSocket.getInputStream());
              ObjectOutputStream out = new ObjectOutputStream(clientSocket.getOutputStream())) {
 
-            String request = (String) in.readObject();
-            if (request != null && request.startsWith("CONNECT_REQUEST")) {
-                String clientAddress = request.split(" ")[1];
-                System.out.println("Received connection request from " + clientAddress);
-
-                // Send acknowledgment back to the client
-                out.writeObject("OK");
-                out.flush();
-            } else {
-                System.out.println("Received unknown message: " + request);
-            }
+        	Message m = (Message) in.readObject();
+        	
+        	bm.receive(clientSocket, getSocketId(), m);
+        	
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
         }
+    }
+    
+    private int getSocketId() {
+    	for (Map.Entry<Integer, Socket> entry : connectedNodes.entrySet()) {
+			Integer key = entry.getKey();
+			Socket val = entry.getValue();
+			
+			if(clientSocket.equals(val)) {
+				return key;
+			}
+		}
+    	
+    	return -1;
     }
 }

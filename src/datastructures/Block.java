@@ -1,6 +1,6 @@
 package datastructures;
 
-public class Block implements Content {
+public class Block {
 
 	private byte[] hash;
 	private final int epoch;
@@ -31,6 +31,11 @@ public class Block implements Content {
 	}
 	
 	private void calculateHash(Block prevBlock) {
+		if(prevBlock == null) {
+			//genesis block only has length 1 for the hash
+			hash = new byte[] {0x00};
+			return;
+		}
 		//TODO implement SHA1 hash
 	}
 }
