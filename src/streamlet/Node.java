@@ -1,15 +1,12 @@
 package streamlet;
 
-import network.NodeClient;
 import network.NodeServer;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStream;
+import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -24,71 +21,62 @@ import java.util.concurrent.TimeUnit;
 import broadcast.BroadcastManager;
 import datastructures.Block;
 import datastructures.Message;
+import datastructures.MessageType;
 
 public class Node {
 
 	private static int nodeId;
 	private static String selfAddress;
 	private static int selfPort;
-	private static Set<String> connectedNodes = new HashSet<>(); // Set of connected nodes as "id ip:port"
 	private static HashMap<Integer, String> allNodes = new HashMap<Integer, String>(); // List of all nodes read from file
 	
-	private static volatile HashMap<Integer, Socket> nodeConnections = new HashMap<Integer, Socket>();
+	private static volatile HashMap<Integer, ObjectOutputStream> nodeConnections = new HashMap<Integer, ObjectOutputStream>();
 	private static volatile List<Block> blockChain = new ArrayList<Block>();
 	private static volatile List<Message> votesReceived = new ArrayList<Message>();
+	private static volatile boolean receivedProposedBlock = false;
+	
 	
 	private static String startTime; // Configured start time for connections
 	private static int seed;
 	private static int epochDurationSec;
+	
+	private static int currentEpoch;
+	private static int currentLider;
+	private static BroadcastManager bm;
+	
 	private static Random rd;
 	
 	
-	public static void main(String[] args) {
-		if (args.length != 3) {
-			System.out.println("Usage: java Node <id> <nodesFile> <configFile>");
-			return;
-		}
+	 private static void waitForStartTime() {
+	        try {
+	            // Parse the time input as "HH:mm:ss"
+	            SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
+	            Date targetTime = timeFormat.parse(startTime);
 
-		nodeId = Integer.parseInt(args[0]);
-		String nodesFile = args[1];
-		String configFile = args[2];
+	            // Get the current time in "HH:mm:ss" for today's date
+	            Date currentTime = new Date();
+	            SimpleDateFormat fullDateFormat = new SimpleDateFormat("yyyy-MM-dd ");
+	            String todayDate = fullDateFormat.format(currentTime);
 
-		if (!readNodesFile(nodesFile) || !readConfigFile(configFile)) {
-			return;
-		}
-		
-		rd = new Random(seed);
-		
-		Block genesisBlock = new Block(0, 0, null, null);
-		blockChain.add(genesisBlock);
-		
-		BroadcastManager bm = new BroadcastManager(nodeId);
-		NodeServer server = new NodeServer(selfAddress, nodeConnections, bm);
-		Thread serverThread = new Thread(server);
-		serverThread.start();
+	            // Construct target datetime as "yyyy-MM-dd HH:mm:ss"
+	            targetTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+	                    .parse(todayDate + timeFormat.format(targetTime));
 
-		waitForStartTime();
+	            // If the target time is already passed today, add one day
+	            if (targetTime.before(currentTime)) {
+	                targetTime = new Date(targetTime.getTime() + TimeUnit.DAYS.toMillis(1));
+	            }
 
-		// Start the client thread to connect to the target node
-		connectToNode();
-//		startEpoch();
-	}
-
-	private static void waitForStartTime() {
-		try {
-			SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-			Date targetTime = dateFormat.parse(startTime);
-			Date currentTime = new Date();
-
-			long waitTime = targetTime.getTime() - currentTime.getTime();
-			if (waitTime > 0) {
-				System.out.println("Waiting until start time: " + startTime);
-				TimeUnit.MILLISECONDS.sleep(waitTime);
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-	}
+	            // Calculate wait time
+	            long waitTime = targetTime.getTime() - currentTime.getTime();
+	            if (waitTime > 0) {
+	                System.out.println("Waiting until start time: " + startTime);
+	                TimeUnit.MILLISECONDS.sleep(waitTime);
+	            }
+	        } catch (Exception e) {
+	            e.printStackTrace();
+	        }
+	    }
 
 	private static boolean readNodesFile(String nodesFile) {
 		File file = new File(nodesFile);
@@ -158,45 +146,109 @@ public class Node {
 		
 		for (Integer id : allNodes.keySet()) {
 			String nodeAddress = allNodes.get(id);
-			NodeClient client = new NodeClient(nodeAddress, nodeId, epochDurationSec, id, rd, nodeConnections, blockChain, votesReceived);
-			Thread clientThread = new Thread(client);
-			clientThread.start();
+			
+			String[] args = nodeAddress.split(":");
+			
+			try (Socket s = new Socket(args[0], Integer.parseInt(args[1]))){
+				System.out.printf("Connected to %s\n", nodeAddress);
+				
+				
+				nodeConnections.put(id, new ObjectOutputStream(s.getOutputStream()));
+			}catch(IOException e) {
+				System.out.printf("Could not connect to node with address %s\n", nodeAddress);
+			}
 		}
-		// connectedNodes.add(nodeAddress);
 	}
 	
-//	public static int electLider() {
-//		System.out.println("Electing new Lider...");
-//		currentLider = rd.nextInt() % allNodes.size();
-//		System.out.printf("New Lider is %d\n", currentLider);
-//		return currentLider;
-//	}
-//	
-//	private static void startEpoch() {
-//		electLider();
-//		propose();
-//		//wait for leader multicast
-//		vote();
-//	}
-//	
-//	private static void propose() {
-//		if(currentLider == nodeId) {
-//			return;
-//		}
-//		currentEpoch++;
-//		int blockChainSize = blockChain.size();
-//		
-//		Block newBlock = new Block(currentEpoch, blockChainSize + 1, null, blockChain.get(blockChainSize-1));
-//		
-//		//multicast of newBlock
-//	}
-//	
-//	private static void vote() {
-//		//receive proposed block from leader
-//		
-//		
-//		
-//		//if received n/2 votes for block notarize it
-//	}
+	private static void startEpoch() throws IOException {
+		electLider();
+		propose();
+		
+		while(true);
+		// wait for leader multicast
+		//vote();
+	}
+	
+	public static int electLider() {
+		System.out.println("Electing new Lider...");
+		int index = rd.nextInt() %  nodeConnections.size();
+		
+		int[] keyArray = nodeConnections.keySet().stream()
+                .mapToInt(Integer::intValue)
+                .toArray();
+		
+		currentLider = keyArray[index];
+		
+		System.out.printf("New Lider is %d\n", keyArray[index]);
+		return currentLider;
+	}
+
+	private static void propose() throws IOException {
+		if (currentLider != nodeId) {
+			System.out.println("Is not current epoch Lider");
+			System.out.println("Waiting for proposed block");
+			while(!receivedProposedBlock);
+			return;
+		}
+		currentEpoch++;
+		int blockChainSize = blockChain.size();
+
+		Block newBlock = new Block(currentEpoch, blockChainSize + 1, null, blockChain.get(blockChainSize - 1));
+
+		// multicast of newBlock
+		Message m = new Message(MessageType.PROPOSE, nodeId, null, newBlock);
+
+		bm.send(m, nodeConnections);
+	}
+
+	private static void vote() {
+		// receive proposed block from leader
+		System.out.println("Waiting to receive necessary votes");
+		while (votesReceived.size() < 5 / 2)
+			;
+
+		// if received n/2 votes for block notarize it
+	}
+
+	public static void main(String[] args) {
+		if (args.length != 3) {
+			System.out.println("Usage: java Node <id> <nodesFile> <configFile>");
+			return;
+		}
+
+		nodeId = Integer.parseInt(args[0]);
+		String nodesFile = args[1];
+		String configFile = args[2];
+
+		if (!readNodesFile(nodesFile) || !readConfigFile(configFile)) {
+			return;
+		}
+		
+		rd = new Random(seed);
+		
+		Block genesisBlock = new Block(0, 0, null, null);
+		blockChain.add(genesisBlock);
+		
+		bm = new BroadcastManager(nodeId);
+		NodeServer server = new NodeServer(selfAddress, nodeConnections, bm, receivedProposedBlock);
+		Thread serverThread = new Thread(server);
+		serverThread.start();
+
+		System.out.printf("Node ID: %d\n", nodeId);
+		waitForStartTime();
+
+		// Start the client thread to connect to the target node
+		connectToNode();
+		
+		try {
+			startEpoch();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+
+
+
 
 }
