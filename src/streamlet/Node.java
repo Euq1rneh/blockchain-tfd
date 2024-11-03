@@ -14,6 +14,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -30,7 +31,8 @@ public class Node {
 	private static int selfPort;
 	private static HashMap<Integer, String> allNodes = new HashMap<Integer, String>(); // List of all nodes read from file
 	
-	private static volatile HashMap<Integer, ObjectOutputStream> nodeConnections = new HashMap<Integer, ObjectOutputStream>();
+	private static volatile HashMap<Integer, Socket> nodeSockets = new HashMap<Integer, Socket>();
+	private static volatile HashMap<Integer, ObjectOutputStream> nodeStreams = new HashMap<Integer, ObjectOutputStream>();
 	private static volatile List<Block> blockChain = new ArrayList<Block>();
 	private static volatile List<Message> votesReceived = new ArrayList<Message>();
 	private static volatile boolean receivedProposedBlock = false;
@@ -152,8 +154,8 @@ public class Node {
 			try (Socket s = new Socket(args[0], Integer.parseInt(args[1]))){
 				System.out.printf("Connected to %s\n", nodeAddress);
 				
-				
-				nodeConnections.put(id, new ObjectOutputStream(s.getOutputStream()));
+				nodeSockets.put(id, s);
+				nodeStreams.put(id, new ObjectOutputStream(s.getOutputStream()));
 			}catch(IOException e) {
 				System.out.printf("Could not connect to node with address %s\n", nodeAddress);
 			}
@@ -171,9 +173,9 @@ public class Node {
 	
 	public static int electLider() {
 		System.out.println("Electing new Lider...");
-		int index = rd.nextInt() %  nodeConnections.size();
+		int index = rd.nextInt() %  nodeStreams.size();
 		
-		int[] keyArray = nodeConnections.keySet().stream()
+		int[] keyArray = nodeStreams.keySet().stream()
                 .mapToInt(Integer::intValue)
                 .toArray();
 		
@@ -188,6 +190,10 @@ public class Node {
 			System.out.println("Is not current epoch Lider");
 			System.out.println("Waiting for proposed block");
 			while(!receivedProposedBlock);
+			
+			Message m = bm.deliver();
+			
+			System.out.printf("Received message from %d of type %s\n", m.getSender(), m.getMessageType().toString());
 			return;
 		}
 		currentEpoch++;
@@ -197,8 +203,12 @@ public class Node {
 
 		// multicast of newBlock
 		Message m = new Message(MessageType.PROPOSE, nodeId, null, newBlock);
-
-		bm.send(m, nodeConnections);
+		
+		for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
+			System.out.printf("Sending message to node with ID %d\n", entry.getKey());
+			ObjectOutputStream stream = entry.getValue();
+			bm.send(m, stream);	
+		}
 	}
 
 	private static void vote() {
@@ -230,7 +240,7 @@ public class Node {
 		blockChain.add(genesisBlock);
 		
 		bm = new BroadcastManager(nodeId);
-		NodeServer server = new NodeServer(selfAddress, nodeConnections, bm, receivedProposedBlock);
+		NodeServer server = new NodeServer(selfAddress, nodeStreams, bm, receivedProposedBlock);
 		Thread serverThread = new Thread(server);
 		serverThread.start();
 

@@ -18,39 +18,43 @@ public class BroadcastManager {
 		this.broadcasterId = broadcasterId;
 	}
 
-	public void receive(Socket socket, int socketId, HashMap<Integer, Socket> echoNodes, Message m) throws IOException {
-		System.out.println("Checking message...");
-
-//		if(m.getMessageType().equals(MessageType.ECHO)) {
-//			
-//		}else {
-//			
-//		}
-		if (!m.equals(lastMessage)) {
-			System.out.println("Received new message");
-			int senderId = m.getSender();
-
-			if (socketId == senderId || socketId == broadcasterId)
-				return;
-
-			Message echoMsg = new Message(MessageType.ECHO, broadcasterId, m, null);
-			send(echoMsg, echoNodes);
-			System.out.println("Echoing Message");
+	public void receive(Socket socket, int socketId, HashMap<Integer, ObjectOutputStream> echoNodes, Message m) throws IOException {
+		System.out.println("Analysing received message...");
+		//retrieve inner message (perguntar prof)
+		if(m.getMessageType().equals(MessageType.ECHO)) {
+			System.out.println("Message type is ECHO. Retrieving inner message...");
+			m = m.getMessage();	
+		}
+		
+		if(lastMessage.equals(m)) {
+			System.out.println("Received message is equal to last message skipping echo process");
 			return;
 		}
-		System.out.println("Already received message once. Cancelling echo");
-	}
-
-	public void send(Message m, HashMap<Integer, Socket> nodes) throws IOException {
 		
-		for (Map.Entry<Integer, Socket> entry : nodes.entrySet()) {
-			Socket s = entry.getValue();
+		System.out.println("Received message is new starting echo process...");
+		Message echoMsg = new Message(MessageType.ECHO, broadcasterId, m, null);
+		
+		for (Map.Entry<Integer, ObjectOutputStream> entry : echoNodes.entrySet()) {
+			Integer id = entry.getKey();
+			ObjectOutputStream stream = entry.getValue();
 			
-			ObjectOutputStream out = new ObjectOutputStream(s.getOutputStream());
-
-			out.writeObject(m);	
+			if(id == broadcasterId || id == m.getSender()) {
+				System.out.println("Skipping current node (same ID as message sender/is this node)");
+				continue;
+			}
+			System.out.printf("Echoing messagt to node with ID %d\n", entry.getKey());
+			
+			send(echoMsg, stream);
 		}
 		
-		
+		lastMessage = m;
+	}
+
+	public void send(Message m, ObjectOutputStream stream) throws IOException {
+			stream.writeObject(m);
+	}
+	
+	public Message deliver() {
+		return lastMessage;
 	}
 }
