@@ -35,9 +35,9 @@ public class Node {
 	private static volatile HashMap<Integer, Socket> nodeSockets = new HashMap<Integer, Socket>();
 	private static volatile HashMap<Integer, ObjectOutputStream> nodeStreams = new HashMap<Integer, ObjectOutputStream>();
 	private static volatile List<Block> blockChain = new ArrayList<Block>();
-	private static volatile List<Message> votesReceived = new ArrayList<Message>();
-	
-	public static volatile boolean receivedProposedBlock = false;
+	public static volatile List<Message> votesReceived = new ArrayList<Message>();
+
+	public static volatile boolean canDeliver = false;
 
 	private static String startTime; // Configured start time for connections
 	private static int seed;
@@ -167,10 +167,10 @@ public class Node {
 
 	private static void startEpoch() throws IOException {
 		electLider();
-		propose();
+		Message m = propose();
 
 		// wait for leader multicast
-		// vote();
+		vote(m);
 	}
 
 	public static int electLider() {
@@ -185,45 +185,76 @@ public class Node {
 		return currentLider;
 	}
 
-	private static void propose() throws IOException {
+	private static Message propose() throws IOException {
+		Message m;
+		System.out.println("--------------------- PROPOSE PHASE  ---------------------");
 		if (currentLider != nodeId) {
 			System.out.println("Is not current epoch Lider");
 			System.out.println("Waiting for proposed block");
-			while (!receivedProposedBlock)
-				;
+		} else {
+			currentEpoch++;
+			int blockChainSize = blockChain.size();
 
-			Message m = bm.deliver();
-			
-			if(m == null) {
-				System.out.println("Error delivering message");
-				return;
+			Block newBlock = new Block(currentEpoch, blockChainSize + 1, null, blockChain.get(blockChainSize - 1));
+
+			// multicast of newBlock
+			m = new Message(MessageType.PROPOSE, nodeId, null, newBlock);
+
+			for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
+				System.out.printf("\033[34mSending\033[0m message to node with ID %d\n", entry.getKey());
+				ObjectOutputStream stream = entry.getValue();
+				bm.send(m, stream);
 			}
-			
-			System.out.printf("Received message from %d of type %s\n", m.getSender(), m.getMessageType().toString());
-			return;
 		}
-		currentEpoch++;
-		int blockChainSize = blockChain.size();
 
-		Block newBlock = new Block(currentEpoch, blockChainSize + 1, null, blockChain.get(blockChainSize - 1));
-
-		// multicast of newBlock
-		Message m = new Message(MessageType.PROPOSE, nodeId, null, newBlock);
-
-		for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
-			System.out.printf("\033[34mSending\033[0m message to node with ID %d\n", entry.getKey());
-			ObjectOutputStream stream = entry.getValue();
-			bm.send(m, stream);
-		}
-	}
-
-	private static void vote() {
-		// receive proposed block from leader
-		System.out.println("Waiting to receive necessary votes");
-		while (votesReceived.size() < 5 / 2)
+		while (!canDeliver)
 			;
 
+		m = bm.deliver();
+
+		if (m == null) {
+			System.out.println("Error delivering message");
+			return null;
+		}
+		System.out.printf("Received message from %d of type %s\n", m.getSender(), m.getMessageType().toString());		
+		System.out.println("--------------------- PROPOSE PHASE END ---------------------");
+		return m;
+	}
+
+	private static void vote(Message m) throws IOException {
+		System.out.println("--------------------- VOTE PHASE ---------------------");
+		// receive proposed block from leader
+		Block b = m.getBlock();
+		if (b == null) {
+			System.out.println("Could not vote. Block in message was null");
+			return;
+		}
+
+		if (b.getLength() < blockChain.size()) {
+			// no vote
+			return;
+		}
+
+		Message vote = new Message(MessageType.VOTE, nodeId, null, b);
+
+		for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
+			System.out.printf("\033[35mVoting\033[0m message to node with ID %d\n", entry.getKey());
+			ObjectOutputStream stream = entry.getValue();
+			bm.send(vote, stream);
+		}
+
+		System.out.println("Waiting to receive necessary votes");
+		
+		while (votesReceived.size() < (int)(nodeStreams.size() / 2)) {
+			System.out.printf("Votes needed: %d\n", (nodeStreams.size() / 2));
+			System.out.printf("Votes received: %d | Missing votes: %d\n", votesReceived.size(),
+					(nodeStreams.size() / 2) - votesReceived.size());
+		}
+
 		// if received n/2 votes for block notarize it
+		System.out.println("--------------------- VOTE PHASE  END ---------------------");
+		
+		System.out.println("Final vote count= "+ votesReceived.size());
 	}
 
 	public static void main(String[] args) {

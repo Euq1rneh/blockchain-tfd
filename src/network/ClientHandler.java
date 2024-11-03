@@ -32,9 +32,8 @@ class ClientHandler implements Runnable {
         		
         		Message m = (Message) in.readObject();
         		
-            	bm.receive(connectedNodes, m);	
-            	System.out.println("Received proposed block. Advancing to vote phase...");
-            	Node.receivedProposedBlock = true;
+            	bm.receive(connectedNodes, m);
+            	Node.canDeliver = true;
         	}
         	
         } catch (IOException | ClassNotFoundException e) {
