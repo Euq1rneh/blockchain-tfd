@@ -3,7 +3,9 @@ package broadcast;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import datastructures.Message;
@@ -13,6 +15,7 @@ import streamlet.Node;
 public class BroadcastManager {
 
 	private Message lastMessage = null;
+	private List<Message> lastMessages = new ArrayList<Message>();
 	private int broadcasterId; // own ID
 
 	public BroadcastManager(int broadcasterId) {
@@ -22,20 +25,21 @@ public class BroadcastManager {
 	public synchronized void receive(HashMap<Integer, ObjectOutputStream> echoNodes, Message m) throws IOException {
 		System.out.println("-------------- BroadcastManager.receive() --------------");
 		System.out.println("Analysing received message...");
-
-		// retrieve inner message (perguntar prof)		
+		
+		// retrieve inner message (perguntar prof)
 		if (m.getMessageType().equals(MessageType.ECHO)) {
 			System.out.println("Message type is ECHO. Retrieving inner message...");
-			m = m.getMessage();
+			m = m.getMessage();			
+		}
+
+		if (m.getMessageType().equals(MessageType.VOTE)) {
+			System.out.println("Message type is VOTE. Adding to votes...");
+			if (Node.votesReceived.contains(m)) {
+				return;
+			}
+			Node.votesReceived.add(m);
 		}
 		
-		if(m.getMessageType().equals(MessageType.VOTE)) {
-			System.out.println("Message type is VOTE. Adding to votes...");
-			if(!Node.votesReceived.contains(m)) {
-				Node.votesReceived.add(m);	
-			}
-		}		
-
 		if (lastMessage != null && lastMessage.equals(m)) {
 			System.out.println("Received message is equal to last message skipping echo process");
 			return;

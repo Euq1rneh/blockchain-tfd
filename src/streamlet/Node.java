@@ -170,7 +170,7 @@ public class Node {
 		Message m = propose();
 
 		// wait for leader multicast
-		vote(m);
+		//vote(m);
 	}
 
 	public static int electLider() {
@@ -216,7 +216,7 @@ public class Node {
 			System.out.println("Error delivering message");
 			return null;
 		}
-		System.out.printf("Received message from %d of type %s\n", m.getSender(), m.getMessageType().toString());		
+		System.out.printf("Received message from %d of type %s\n", m.getSender(), m.getMessageType().toString());
 		System.out.println("--------------------- PROPOSE PHASE END ---------------------");
 		return m;
 	}
@@ -230,7 +230,7 @@ public class Node {
 			return;
 		}
 
-		if (b.getLength() < blockChain.size()) {
+		if (b.getLength() <= blockChain.size()) {
 			// no vote
 			return;
 		}
@@ -244,17 +244,20 @@ public class Node {
 		}
 
 		System.out.println("Waiting to receive necessary votes");
-		
-		while (votesReceived.size() < (int)(nodeStreams.size() / 2)) {
-			System.out.printf("Votes needed: %d\n", (nodeStreams.size() / 2));
-			System.out.printf("Votes received: %d | Missing votes: %d\n", votesReceived.size(),
-					(nodeStreams.size() / 2) - votesReceived.size());
+
+		while (votesReceived.size() <= (int) (nodeStreams.size() / 2)) {
+//			System.out.printf("Votes needed: %d\n", (nodeStreams.size() / 2));
+//			System.out.printf("Votes received: %d | Missing votes: %d\n", votesReceived.size(),
+//					(nodeStreams.size() / 2) - votesReceived.size());
 		}
 
 		// if received n/2 votes for block notarize it
 		System.out.println("--------------------- VOTE PHASE  END ---------------------");
-		
-		System.out.println("Final vote count= "+ votesReceived.size());
+
+		System.out.println("Final vote count= " + votesReceived.size());
+
+		while (true)
+			;
 	}
 
 	public static void main(String[] args) {

@@ -29,7 +29,6 @@ class ClientHandler implements Runnable {
         try (ObjectInputStream in = new ObjectInputStream(clientSocket.getInputStream());) {
         	
         	while(true) {
-        		
         		Message m = (Message) in.readObject();
         		
             	bm.receive(connectedNodes, m);
