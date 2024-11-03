@@ -29,56 +29,55 @@ public class Node {
 	private static int nodeId;
 	private static String selfAddress;
 	private static int selfPort;
-	private static HashMap<Integer, String> allNodes = new HashMap<Integer, String>(); // List of all nodes read from file
-	
+	private static HashMap<Integer, String> allNodes = new HashMap<Integer, String>(); // List of all nodes read from
+																						// file
+
 	private static volatile HashMap<Integer, Socket> nodeSockets = new HashMap<Integer, Socket>();
 	private static volatile HashMap<Integer, ObjectOutputStream> nodeStreams = new HashMap<Integer, ObjectOutputStream>();
 	private static volatile List<Block> blockChain = new ArrayList<Block>();
 	private static volatile List<Message> votesReceived = new ArrayList<Message>();
-	private static volatile boolean receivedProposedBlock = false;
 	
-	
+	public static volatile boolean receivedProposedBlock = false;
+
 	private static String startTime; // Configured start time for connections
 	private static int seed;
 	private static int epochDurationSec;
-	
+
 	private static int currentEpoch;
 	private static int currentLider;
 	private static BroadcastManager bm;
-	
+
 	private static Random rd;
-	
-	
-	 private static void waitForStartTime() {
-	        try {
-	            // Parse the time input as "HH:mm:ss"
-	            SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
-	            Date targetTime = timeFormat.parse(startTime);
 
-	            // Get the current time in "HH:mm:ss" for today's date
-	            Date currentTime = new Date();
-	            SimpleDateFormat fullDateFormat = new SimpleDateFormat("yyyy-MM-dd ");
-	            String todayDate = fullDateFormat.format(currentTime);
+	private static void waitForStartTime() {
+		try {
+			// Parse the time input as "HH:mm:ss"
+			SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
+			Date targetTime = timeFormat.parse(startTime);
 
-	            // Construct target datetime as "yyyy-MM-dd HH:mm:ss"
-	            targetTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-	                    .parse(todayDate + timeFormat.format(targetTime));
+			// Get the current time in "HH:mm:ss" for today's date
+			Date currentTime = new Date();
+			SimpleDateFormat fullDateFormat = new SimpleDateFormat("yyyy-MM-dd ");
+			String todayDate = fullDateFormat.format(currentTime);
 
-	            // If the target time is already passed today, add one day
-	            if (targetTime.before(currentTime)) {
-	                targetTime = new Date(targetTime.getTime() + TimeUnit.DAYS.toMillis(1));
-	            }
+			// Construct target datetime as "yyyy-MM-dd HH:mm:ss"
+			targetTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(todayDate + timeFormat.format(targetTime));
 
-	            // Calculate wait time
-	            long waitTime = targetTime.getTime() - currentTime.getTime();
-	            if (waitTime > 0) {
-	                System.out.println("Waiting until start time: " + startTime);
-	                TimeUnit.MILLISECONDS.sleep(waitTime);
-	            }
-	        } catch (Exception e) {
-	            e.printStackTrace();
-	        }
-	    }
+			// If the target time is already passed today, add one day
+			if (targetTime.before(currentTime)) {
+				targetTime = new Date(targetTime.getTime() + TimeUnit.DAYS.toMillis(1));
+			}
+
+			// Calculate wait time
+			long waitTime = targetTime.getTime() - currentTime.getTime();
+			if (waitTime > 0) {
+				System.out.println("Waiting until start time: " + startTime);
+				TimeUnit.MILLISECONDS.sleep(waitTime);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
 
 	private static boolean readNodesFile(String nodesFile) {
 		File file = new File(nodesFile);
@@ -92,6 +91,9 @@ public class Node {
 			BufferedReader br = new BufferedReader(new FileReader(file));
 			String line;
 			while ((line = br.readLine()) != null) {
+				if (line.contains("//")) {
+					continue;
+				}
 				String[] args = line.split(" ");
 				if (Integer.parseInt(args[0]) == nodeId) {
 					selfAddress = args[1];
@@ -145,42 +147,40 @@ public class Node {
 	}
 
 	public static void connectToNode() {
-		
+
 		for (Integer id : allNodes.keySet()) {
 			String nodeAddress = allNodes.get(id);
-			
+
 			String[] args = nodeAddress.split(":");
-			
-			try (Socket s = new Socket(args[0], Integer.parseInt(args[1]))){
+
+			try {
+				Socket s = new Socket(args[0], Integer.parseInt(args[1]));
 				System.out.printf("Connected to %s\n", nodeAddress);
-				
+
 				nodeSockets.put(id, s);
 				nodeStreams.put(id, new ObjectOutputStream(s.getOutputStream()));
-			}catch(IOException e) {
+			} catch (IOException e) {
 				System.out.printf("Could not connect to node with address %s\n", nodeAddress);
 			}
 		}
 	}
-	
+
 	private static void startEpoch() throws IOException {
 		electLider();
 		propose();
-		
-		while(true);
+
 		// wait for leader multicast
-		//vote();
+		// vote();
 	}
-	
+
 	public static int electLider() {
-		System.out.println("Electing new Lider...");
-		int index = rd.nextInt() %  nodeStreams.size();
-		
-		int[] keyArray = nodeStreams.keySet().stream()
-                .mapToInt(Integer::intValue)
-                .toArray();
-		
+		System.out.printf("Electing new Lider (available nodes %d)...\n", nodeStreams.size());
+		int index = rd.nextInt(100) % nodeStreams.size();
+
+		int[] keyArray = nodeStreams.keySet().stream().mapToInt(Integer::intValue).toArray();
+
 		currentLider = keyArray[index];
-		
+
 		System.out.printf("New Lider is %d\n", keyArray[index]);
 		return currentLider;
 	}
@@ -189,9 +189,15 @@ public class Node {
 		if (currentLider != nodeId) {
 			System.out.println("Is not current epoch Lider");
 			System.out.println("Waiting for proposed block");
-			while(!receivedProposedBlock);
-			
+			while (!receivedProposedBlock)
+				;
+
 			Message m = bm.deliver();
+			
+			if(m == null) {
+				System.out.println("Error delivering message");
+				return;
+			}
 			
 			System.out.printf("Received message from %d of type %s\n", m.getSender(), m.getMessageType().toString());
 			return;
@@ -203,11 +209,11 @@ public class Node {
 
 		// multicast of newBlock
 		Message m = new Message(MessageType.PROPOSE, nodeId, null, newBlock);
-		
+
 		for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
-			System.out.printf("Sending message to node with ID %d\n", entry.getKey());
+			System.out.printf("\033[34mSending\033[0m message to node with ID %d\n", entry.getKey());
 			ObjectOutputStream stream = entry.getValue();
-			bm.send(m, stream);	
+			bm.send(m, stream);
 		}
 	}
 
@@ -233,14 +239,14 @@ public class Node {
 		if (!readNodesFile(nodesFile) || !readConfigFile(configFile)) {
 			return;
 		}
-		
+
 		rd = new Random(seed);
-		
+
 		Block genesisBlock = new Block(0, 0, null, null);
 		blockChain.add(genesisBlock);
-		
+
 		bm = new BroadcastManager(nodeId);
-		NodeServer server = new NodeServer(selfAddress, nodeStreams, bm, receivedProposedBlock);
+		NodeServer server = new NodeServer(selfAddress, nodeStreams, bm);
 		Thread serverThread = new Thread(server);
 		serverThread.start();
 
@@ -249,16 +255,12 @@ public class Node {
 
 		// Start the client thread to connect to the target node
 		connectToNode();
-		
+
 		try {
 			startEpoch();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 	}
-
-
-
-
 
 }

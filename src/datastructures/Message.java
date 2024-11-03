@@ -1,8 +1,9 @@
 package datastructures;
 
+import java.io.Serializable;
 import java.util.Objects;
 
-public class Message {
+public class Message implements Serializable{
 	
 	private final MessageType type;
 	private final Block block;

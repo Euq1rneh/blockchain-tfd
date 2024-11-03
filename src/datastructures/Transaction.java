@@ -1,6 +1,9 @@
 package datastructures;
 
-public class Transaction {
+import java.io.Serializable;
+import java.util.Objects;
+
+public class Transaction implements Serializable{
 	
 	private final int sender;
 	private final int receiver;
@@ -34,4 +37,24 @@ public class Transaction {
 	private void setTransactionId() {
 		//set transaction id ?????
 	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(amount, id, receiver, sender);
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		Transaction other = (Transaction) obj;
+		return Double.doubleToLongBits(amount) == Double.doubleToLongBits(other.amount) && id == other.id
+				&& receiver == other.receiver && sender == other.sender;
+	}
+	
+	
 }
