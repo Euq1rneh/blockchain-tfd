@@ -6,6 +6,7 @@ import java.net.*;
 import java.util.HashMap;
 
 import broadcast.BroadcastManager;
+import streamlet.Node;
 
 public class NodeServer implements Runnable {
 	private int port;
@@ -22,7 +23,7 @@ public class NodeServer implements Runnable {
     public void run() {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("Node listening on port: " + port);
-            while (!serverSocket.isClosed()) {
+            while (!Node.close) {
                 Socket clientSocket = serverSocket.accept();
                 new Thread(new ClientHandler(clientSocket, bm, connectedNodes)).start();
             }
