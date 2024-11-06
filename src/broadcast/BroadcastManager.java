@@ -73,7 +73,9 @@ public class BroadcastManager {
 			send(echoMsg, stream);
 		}
 
-		lastMessage = m;
+		if(m.getMessageType().equals(MessageType.PROPOSE)) {
+			lastMessage = m;	
+		}
 		processLogger.info("-------------- BroadcastManager.receive() END --------------");
 		System.out.println("-------------- BroadcastManager.receive() END --------------");
 	}
@@ -94,6 +96,8 @@ public class BroadcastManager {
 	}
 
 	public Message deliver() {
-		return lastMessage;
+		Message deliver = lastMessage;
+		lastMessage = null;
+		return deliver;
 	}
 }

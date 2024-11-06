@@ -41,7 +41,8 @@ public class Node {
 
 	private static volatile HashMap<Integer, Socket> nodeSockets = new HashMap<Integer, Socket>();
 	private static volatile HashMap<Integer, ObjectOutputStream> nodeStreams = new HashMap<Integer, ObjectOutputStream>();
-	private static volatile List<Block> blockChain = new ArrayList<Block>();
+	private static volatile List<Block> blockChain = new ArrayList<Block>(); // only contains finalized blocks
+	private static volatile List<Block> notarizedChain = new ArrayList<Block>(); //only contains notarized blocks
 	public static volatile Queue<Message> votesReceived = new ConcurrentLinkedQueue<Message>();
 
 	public static volatile boolean canDeliver = false;
@@ -62,24 +63,19 @@ public class Node {
 
 	private static void waitForStartTime() {
 		try {
-			// Parse the time input as "HH:mm:ss"
 			SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
 			Date targetTime = timeFormat.parse(startTime);
 
-			// Get the current time in "HH:mm:ss" for today's date
 			Date currentTime = new Date();
 			SimpleDateFormat fullDateFormat = new SimpleDateFormat("yyyy-MM-dd ");
 			String todayDate = fullDateFormat.format(currentTime);
 
-			// Construct target datetime as "yyyy-MM-dd HH:mm:ss"
 			targetTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(todayDate + timeFormat.format(targetTime));
 
-			// If the target time is already passed today, add one day
 			if (targetTime.before(currentTime)) {
 				targetTime = new Date(targetTime.getTime() + TimeUnit.DAYS.toMillis(1));
 			}
 
-			// Calculate wait time
 			long waitTime = targetTime.getTime() - currentTime.getTime();
 			if (waitTime > 0) {
 				processLogger.info("Waiting until start time: " + startTime);
@@ -189,7 +185,6 @@ public class Node {
 			try {
 				socket.close();
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 
@@ -198,8 +193,6 @@ public class Node {
 	}
 
 	private static void startEpoch() throws IOException {
-//		proposeRoundScheduler();
-//		voteRoundScheduler();
 		epochScheduler();
 	}
 
@@ -222,7 +215,7 @@ public class Node {
 		Message m;
 		processLogger.info("--------------------- PROPOSE PHASE  ---------------------");
 		System.out.println("--------------------- PROPOSE PHASE  ---------------------");
-		
+
 		if (currentLider != nodeId) {
 			processLogger.info("Is not current epoch Lider");
 			processLogger.info("Waiting for proposed block");
@@ -231,10 +224,10 @@ public class Node {
 			System.out.println("Waiting for proposed block");
 
 		} else {
-			int blockChainSize = blockChain.size();
-
-			Block newBlock = new Block(currentEpoch, blockChainSize + 1, null, null,
-					blockChain.get(blockChainSize - 1));
+			int parentChainSize = notarizedChain.size();
+			
+			Block newBlock = new Block(currentEpoch, parentChainSize + 1, null, notarizedChain,
+					notarizedChain.get(parentChainSize - 1));
 
 			// multicast of newBlock
 			m = new Message(MessageType.PROPOSE, nodeId, null, newBlock);
@@ -248,7 +241,7 @@ public class Node {
 
 			}
 		}
-		
+
 		while (!canDeliver)
 			;
 		processLogger.info("Delivering message");
@@ -259,8 +252,11 @@ public class Node {
 			System.out.println("Error delivering message");
 			return null;
 		}
-		processLogger.info("Received message from " + m.getSender() + " of type " + m.getMessageType().toString());
+		processLogger.info("Received message from " + m.getSender() + " of type " + m.getMessageType().toString() + "\n\n"+ "######################\n######################\n" + "NOT-CHAIN-LEN=" + notarizedChain.size()
+		+ "\nBLOCK-NOT-CHAIN-LEN=" + m.getBlock().getLength() + "\n######################\n######################\n");
 		System.out.printf("Received message from %d of type %s\n", m.getSender(), m.getMessageType().toString());
+		
+		
 		processLogger.info("--------------------- PROPOSE PHASE END ---------------------");
 		System.out.println("--------------------- PROPOSE PHASE END ---------------------");
 
@@ -272,16 +268,17 @@ public class Node {
 		System.out.println("--------------------- VOTE PHASE ---------------------");
 		// receive proposed block from leader
 		Block b = m.getBlock();
-		
+
 		if (b == null) {
 			System.out.println("Could not vote. Block in message was null");
 			return;
 		}
 
-		processLogger.info("######################\n######################\n"+"BLOCKCHAIN-LEN="+blockChain.size()+"\nBLOCK-NOT-CHAIN-LEN="+ b.getLength()+"\n######################\n######################\n");
+//		processLogger.info("######################\n######################\n" + "NOT-CHAIN-LEN=" + notarizedChain.size()
+//				+ "\nBLOCK-NOT-CHAIN-LEN=" + b.getLength() + "\n######################\n######################\n");
 //		System.out.printf("BLOCKCHAIN-LEN=%d\nBLOCK-NOT-CHAIN-LEN=%d", blockChain.size(), b.getLength());
-		
-		if (b.getLength() <= blockChain.size()) {
+
+		if (b.getLength() <= notarizedChain.size()) {
 			processLogger.info("Chain size of proposed block is smaller. Rejecting block...");
 			System.out.println("Chain size of proposed block is smaller. Rejecting block...");
 			// no vote
@@ -300,11 +297,8 @@ public class Node {
 		processLogger.info("Waiting to receive necessary votes");
 		System.out.println("Waiting to receive necessary votes");
 
-		while (votesReceived.size() <= (int) (nodeStreams.size() / 2)) {
-//			System.out.printf("Votes needed: %d\n", (nodeStreams.size() / 2));
-//			System.out.printf("Votes received: %d | Missing votes: %d\n", votesReceived.size(),
-//					(nodeStreams.size() / 2) - votesReceived.size());
-		}
+		while (votesReceived.size() <= (int) (nodeStreams.size() / 2))
+			;
 
 		// if received n/2 votes block is notarize it
 		processLogger.info("--------------------- VOTE PHASE  END ---------------------");
@@ -314,36 +308,46 @@ public class Node {
 		System.out.println("Final vote count= " + votesReceived.size());
 
 		b.notarize();
-		blockChain.add(b);
+		notarizedChain.add(b);
 	}
 
 	private static void epochScheduler() {
-		Timer timer = new Timer();
+	    Timer timer = new Timer();
 
-		// Schedule a task to run every 5 seconds
-		timer.scheduleAtFixedRate(new TimerTask() {
-			@Override
-			public void run() {
-				// Your code snippet to execute every 5 seconds
-				try {
-					currentEpoch++;
-					votesReceived.clear();
-					processLogger.info("STARTING EPOCH " + currentEpoch);
-					System.out.println("########################################### STARTING EPOCH " + currentEpoch
-							+ "###########################################");
-					electLider();
-					currentEpochMessage = propose();
-					vote(currentEpochMessage);
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-//				System.out.println("Executing task at " + System.currentTimeMillis());
-			}
-		}, 0, roudDurationSec * 1000 * 2); // Initial delay of roundDurationSec ms, repeat every roundDurationSec ms
+	    // Schedule a task to run each epoch
+	    timer.scheduleAtFixedRate(new TimerTask() {
+	        @Override
+	        public void run() {
+	        	canDeliver = false;
+	            currentEpoch++;
+				votesReceived.clear();
+//				currentEpochMessage = null;
+				
+				processLogger.info("STARTING EPOCH " + currentEpoch);
+				System.out.println("###########################################\n"
+				        + " STARTING EPOCH " + currentEpoch
+				        + "\n###########################################");
 
-		// Optional: Add shutdown hook to stop the timer when the program exits
-		Runtime.getRuntime().addShutdownHook(new Thread(timer::cancel));
+				// Step 1: Propose phase
+				electLider();
+				currentEpochMessage = propose();
 
+				// Step 2: Schedule Vote phase after roundDurationSec
+				timer.schedule(new TimerTask() {
+				    @Override
+				    public void run() {
+				        try {
+				            vote(currentEpochMessage);
+				        } catch (IOException e) {
+				            e.printStackTrace();
+				        }
+				    }
+				}, roudDurationSec * 1000); // delay equal to roundDurationSec in milliseconds
+	        }
+	    }, 0, roudDurationSec * 2 * 1000); // Epoch duration: 2 * roundDurationSec (one for each round)
+
+	    // Optional: Add shutdown hook to stop the timer when the program exits
+	    Runtime.getRuntime().addShutdownHook(new Thread(timer::cancel));
 	}
 
 	private static void proposeRoundScheduler() {
@@ -407,7 +411,8 @@ public class Node {
 
 		Block genesisBlock = new Block(0, 0, null, null, null);
 		blockChain.add(genesisBlock);
-
+		notarizedChain.add(genesisBlock);
+		
 		bm = new BroadcastManager(nodeId);
 		try {
 			ProcessLogger.setupLogger("process-log-node" + nodeId);

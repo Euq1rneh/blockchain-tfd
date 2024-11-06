@@ -2,6 +2,7 @@ package datastructures;
 
 import java.io.Serializable;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 
 public class Block implements Serializable{
@@ -12,10 +13,10 @@ public class Block implements Serializable{
 	private final int epoch;
 	private final int length;
 	private final Transaction[] transactions;
-	private final Block[] parentChain;
+	private final List<Block> parentChain;
 	private boolean notarized;
 	
-	public Block(int epoch, int length, Transaction[] transactions, Block[] parentChain, Block prevBlock) {
+	public Block(int epoch, int length, Transaction[] transactions, List<Block> parentChain, Block prevBlock) {
 		this.epoch = epoch;
 		this.length = length;
 		this.transactions = transactions;
@@ -56,13 +57,17 @@ public class Block implements Serializable{
 		notarized = true;
 	}
 
+	public List<Block> getParentChain(){
+		return parentChain;
+	}
+
 	@Override
 	public int hashCode() {
 		final int prime = 31;
 		int result = 1;
 		result = prime * result + Arrays.hashCode(hash);
 		result = prime * result + Arrays.hashCode(transactions);
-		result = prime * result + Objects.hash(epoch, length);
+		result = prime * result + Objects.hash(epoch, length, notarized, parentChain);
 		return result;
 	}
 
@@ -75,9 +80,12 @@ public class Block implements Serializable{
 		if (getClass() != obj.getClass())
 			return false;
 		Block other = (Block) obj;
-		return epoch == other.epoch && length == other.length
-				&& Arrays.equals(transactions, other.transactions);// && Arrays.equals(hash, other.hash);
+		return epoch == other.epoch && Arrays.equals(hash, other.hash) && length == other.length
+				&& notarized == other.notarized && Objects.equals(parentChain, other.parentChain)
+				&& Arrays.equals(transactions, other.transactions);
 	}
+	
+	
 	
 	
 }
