@@ -15,9 +15,14 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 
 import Logger.ErrorLogger;
 import Logger.ProcessLogger;
@@ -37,23 +42,23 @@ public class Node {
 	private static volatile HashMap<Integer, Socket> nodeSockets = new HashMap<Integer, Socket>();
 	private static volatile HashMap<Integer, ObjectOutputStream> nodeStreams = new HashMap<Integer, ObjectOutputStream>();
 	private static volatile List<Block> blockChain = new ArrayList<Block>();
-	public static volatile List<Message> votesReceived = new ArrayList<Message>();
+	public static volatile Queue<Message> votesReceived = new ConcurrentLinkedQueue<Message>();
 
 	public static volatile boolean canDeliver = false;
 	public static volatile boolean close = false;
 
 	private static String startTime; // Configured start time for connections
 	private static int seed;
-	private static int epochDurationSec;
+	private static int roudDurationSec;
 
 	private static int currentEpoch;
 	private static int currentLider;
+	private static Message currentEpochMessage;
 	private static BroadcastManager bm;
 
 	private static Random rd;
 
-	public static ErrorLogger errorLogger;
-	public static ProcessLogger processLogger;
+	private static Logger processLogger = ProcessLogger.logger;
 
 	private static void waitForStartTime() {
 		try {
@@ -77,6 +82,7 @@ public class Node {
 			// Calculate wait time
 			long waitTime = targetTime.getTime() - currentTime.getTime();
 			if (waitTime > 0) {
+				processLogger.info("Waiting until start time: " + startTime);
 				System.out.println("Waiting until start time: " + startTime);
 				TimeUnit.MILLISECONDS.sleep(waitTime);
 			}
@@ -134,8 +140,8 @@ public class Node {
 					seed = Integer.parseInt(args[1]);
 					break;
 
-				case "epoch_time_sec":
-					epochDurationSec = Integer.parseInt(args[1]);
+				case "round_duration_sec":
+					roudDurationSec = Integer.parseInt(args[1]);
 					break;
 
 				case "start_time":
@@ -153,7 +159,6 @@ public class Node {
 	}
 
 	public static void connectToNode() {
-		StringBuilder sb = new StringBuilder();
 		for (Integer id : allNodes.keySet()) {
 			String nodeAddress = allNodes.get(id);
 
@@ -161,19 +166,23 @@ public class Node {
 
 			try {
 				Socket s = new Socket(args[0], Integer.parseInt(args[1]));
-				sb.append("Connected to " + nodeAddress + "\n");
+				ObjectOutputStream stream = new ObjectOutputStream(s.getOutputStream());
+
+				stream.flush();
+
+				processLogger.info("Connected to " + nodeAddress);
 				System.out.printf("Connected to %s\n", nodeAddress);
 
 				nodeSockets.put(id, s);
-				nodeStreams.put(id, new ObjectOutputStream(s.getOutputStream()));
+				nodeStreams.put(id, stream);
 			} catch (IOException e) {
 				System.out.printf("Could not connect to node with address %s\n", nodeAddress);
 			}
 		}
-		processLogger.write(sb.toString(), "MAIN THREAD");
 	}
 
 	public static void close() {
+		processLogger.info("Closing Node");
 		System.out.println("CLOSING NODE");
 		for (Map.Entry<Integer, Socket> entry : nodeSockets.entrySet()) {
 			Socket socket = entry.getValue();
@@ -189,15 +198,13 @@ public class Node {
 	}
 
 	private static void startEpoch() throws IOException {
-		electLider();
-		Message m = propose();
-		// wait for leader multicast
-		vote(m);
+//		proposeRoundScheduler();
+//		voteRoundScheduler();
+		epochScheduler();
 	}
 
 	public static int electLider() {
-		StringBuilder sb = new StringBuilder();
-		sb.append("Electing new Lider (available nodes " + nodeStreams.size() + ")...\n");
+		processLogger.info("Electing new Lider (available nodes " + nodeStreams.size() + ")...");
 		System.out.printf("Electing new Lider (available nodes %d)...\n", nodeStreams.size());
 		int index = rd.nextInt(100) % nodeStreams.size();
 
@@ -205,93 +212,92 @@ public class Node {
 
 		currentLider = keyArray[index];
 
-		sb.append("New Lider is " + keyArray[index] + "\n");
+		processLogger.info("New Lider is " + keyArray[index]);
 		System.out.printf("New Lider is %d\n", keyArray[index]);
 
-		processLogger.write(sb.toString(), "MAIN THREAD");
 		return currentLider;
 	}
 
-	private static Message propose() throws IOException {
-		StringBuilder sb = new StringBuilder();
+	private static Message propose() {
 		Message m;
-		sb.append("--------------------- PROPOSE PHASE  ---------------------\n");
+		processLogger.info("--------------------- PROPOSE PHASE  ---------------------");
 		System.out.println("--------------------- PROPOSE PHASE  ---------------------");
+		
 		if (currentLider != nodeId) {
-			sb.append("Is not current epoch Lider\n" + "Waiting for proposed block\n");
+			processLogger.info("Is not current epoch Lider");
+			processLogger.info("Waiting for proposed block");
+
 			System.out.println("Is not current epoch Lider");
 			System.out.println("Waiting for proposed block");
+
 		} else {
-			currentEpoch++;
 			int blockChainSize = blockChain.size();
 
-			Block newBlock = new Block(currentEpoch, blockChainSize + 1, null, blockChain.get(blockChainSize - 1));
+			Block newBlock = new Block(currentEpoch, blockChainSize + 1, null, null,
+					blockChain.get(blockChainSize - 1));
 
 			// multicast of newBlock
 			m = new Message(MessageType.PROPOSE, nodeId, null, newBlock);
 
 			for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
-				sb.append("Sending message to node with ID " + entry.getKey() + "\n");
+				processLogger.info("Sending message to node with ID " + entry.getKey());
 				System.out.printf("\033[34mSending\033[0m message to node with ID %d\n", entry.getKey());
 				ObjectOutputStream stream = entry.getValue();
+
 				bm.send(m, stream);
+
 			}
 		}
-
+		
 		while (!canDeliver)
 			;
-		sb.append("Delivering message\n");
+		processLogger.info("Delivering message");
 		System.out.println("Delivering message");
 		m = bm.deliver();
 
 		if (m == null) {
-			sb.append("Error delivering message\n");
 			System.out.println("Error delivering message");
-			processLogger.write(sb.toString(), "MAIN THREAD");
 			return null;
 		}
-		sb.append("Received message from " + m.getSender() + " of type " + m.getMessageType().toString() + "\n");
+		processLogger.info("Received message from " + m.getSender() + " of type " + m.getMessageType().toString());
 		System.out.printf("Received message from %d of type %s\n", m.getSender(), m.getMessageType().toString());
-		sb.append("--------------------- PROPOSE PHASE END ---------------------\n");
+		processLogger.info("--------------------- PROPOSE PHASE END ---------------------");
 		System.out.println("--------------------- PROPOSE PHASE END ---------------------");
 
-		processLogger.write(sb.toString(), "MAIN THREAD");
 		return m;
 	}
 
 	private static void vote(Message m) throws IOException {
-		StringBuilder sb = new StringBuilder();
-		sb.append("--------------------- VOTE PHASE ---------------------\n");
+		processLogger.info("--------------------- VOTE PHASE ---------------------");
 		System.out.println("--------------------- VOTE PHASE ---------------------");
 		// receive proposed block from leader
 		Block b = m.getBlock();
+		
 		if (b == null) {
-			sb.append("Could not vote. Block in message was null\n");
 			System.out.println("Could not vote. Block in message was null");
-
-			processLogger.write(sb.toString(), "MAIN THREAD");
 			return;
 		}
 
+		processLogger.info("######################\n######################\n"+"BLOCKCHAIN-LEN="+blockChain.size()+"\nBLOCK-NOT-CHAIN-LEN="+ b.getLength()+"\n######################\n######################\n");
+//		System.out.printf("BLOCKCHAIN-LEN=%d\nBLOCK-NOT-CHAIN-LEN=%d", blockChain.size(), b.getLength());
+		
 		if (b.getLength() <= blockChain.size()) {
-			sb.append("Chain size of proposed block is smaller. Rejecting block...\n");
+			processLogger.info("Chain size of proposed block is smaller. Rejecting block...");
 			System.out.println("Chain size of proposed block is smaller. Rejecting block...");
 			// no vote
-			processLogger.write(sb.toString(), "MAIN THREAD");
-			;
 			return;
 		}
 
 		Message vote = new Message(MessageType.VOTE, nodeId, null, b);
 
 		for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
-			sb.append("Voting message to node with ID " + entry.getKey() + "\n");
+			processLogger.info("Sending Vote message to node with ID " + entry.getKey());
 			System.out.printf("\033[35mVoting\033[0m message to node with ID %d\n", entry.getKey());
 			ObjectOutputStream stream = entry.getValue();
 			bm.send(vote, stream);
 		}
 
-		sb.append("Waiting to receive necessary votes\n");
+		processLogger.info("Waiting to receive necessary votes");
 		System.out.println("Waiting to receive necessary votes");
 
 		while (votesReceived.size() <= (int) (nodeStreams.size() / 2)) {
@@ -300,13 +306,87 @@ public class Node {
 //					(nodeStreams.size() / 2) - votesReceived.size());
 		}
 
-		// if received n/2 votes for block notarize it
-		sb.append("--------------------- VOTE PHASE  END ---------------------\n");
+		// if received n/2 votes block is notarize it
+		processLogger.info("--------------------- VOTE PHASE  END ---------------------");
 		System.out.println("--------------------- VOTE PHASE  END ---------------------");
 
-		sb.append("Final vote count= " + votesReceived.size() + "\n");
+		processLogger.info("Final vote count= " + votesReceived.size());
 		System.out.println("Final vote count= " + votesReceived.size());
-		processLogger.write(sb.toString(), "MAIN THREAD");
+
+		b.notarize();
+		blockChain.add(b);
+	}
+
+	private static void epochScheduler() {
+		Timer timer = new Timer();
+
+		// Schedule a task to run every 5 seconds
+		timer.scheduleAtFixedRate(new TimerTask() {
+			@Override
+			public void run() {
+				// Your code snippet to execute every 5 seconds
+				try {
+					currentEpoch++;
+					votesReceived.clear();
+					processLogger.info("STARTING EPOCH " + currentEpoch);
+					System.out.println("########################################### STARTING EPOCH " + currentEpoch
+							+ "###########################################");
+					electLider();
+					currentEpochMessage = propose();
+					vote(currentEpochMessage);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+//				System.out.println("Executing task at " + System.currentTimeMillis());
+			}
+		}, 0, roudDurationSec * 1000 * 2); // Initial delay of roundDurationSec ms, repeat every roundDurationSec ms
+
+		// Optional: Add shutdown hook to stop the timer when the program exits
+		Runtime.getRuntime().addShutdownHook(new Thread(timer::cancel));
+
+	}
+
+	private static void proposeRoundScheduler() {
+		Timer timer = new Timer();
+
+		// Schedule a task to run every 5 seconds
+		timer.scheduleAtFixedRate(new TimerTask() {
+			@Override
+			public void run() {
+				// Your code snippet to execute every 5 seconds
+
+				electLider();
+				currentEpochMessage = propose();
+
+//				System.out.println("Executing task at " + System.currentTimeMillis());
+			}
+		}, 0, roudDurationSec * 1000); // Initial delay of roundDurationSec ms, repeat every roundDurationSec ms
+
+		// Optional: Add shutdown hook to stop the timer when the program exits
+		Runtime.getRuntime().addShutdownHook(new Thread(timer::cancel));
+
+	}
+
+	private static void voteRoundScheduler() {
+		Timer timer = new Timer();
+
+		// Schedule a task to run every 5 seconds
+		timer.scheduleAtFixedRate(new TimerTask() {
+			@Override
+			public void run() {
+				// Your code snippet to execute every 5 seconds
+				try {
+					vote(currentEpochMessage);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+//				System.out.println("Executing task at " + System.currentTimeMillis());
+			}
+		}, roudDurationSec * 1000, roudDurationSec * 1000); // Initial delay of roundDurationSec ms, repeat every
+															// roundDurationSec ms
+
+		// Optional: Add shutdown hook to stop the timer when the program exits
+		Runtime.getRuntime().addShutdownHook(new Thread(timer::cancel));
 	}
 
 	public static void main(String[] args) {
@@ -325,15 +405,17 @@ public class Node {
 
 		rd = new Random(seed);
 
-		Block genesisBlock = new Block(0, 0, null, null);
+		Block genesisBlock = new Block(0, 0, null, null, null);
 		blockChain.add(genesisBlock);
 
 		bm = new BroadcastManager(nodeId);
-		errorLogger = new ErrorLogger();
-		processLogger = new ProcessLogger();
+		try {
+			ProcessLogger.setupLogger("process-log-node" + nodeId);
+			// ErrorLogger.setupLogger("error-log-node" + nodeId);
+		} catch (IOException e) {
+			System.out.println("Could not create process/error logger");
+		}
 
-//		errorLogger.createLogFile("error-log-node" + nodeId + ".txt");
-//		processLogger.createLogFile("process-log-node" + nodeId + ".txt");
 		NodeServer server = new NodeServer(selfAddress, nodeStreams, bm);
 		Thread serverThread = new Thread(server);
 		serverThread.start();

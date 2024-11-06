@@ -5,6 +5,8 @@ import java.util.Objects;
 
 public class Message implements Serializable{
 	
+	private static final long serialVersionUID = -1241629326055537554L;
+	
 	private final MessageType type;
 	private final Block block;
 	private final Message message;

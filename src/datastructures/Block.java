@@ -6,15 +6,20 @@ import java.util.Objects;
 
 public class Block implements Serializable{
 
+	private static final long serialVersionUID = -4312015834577135441L;
+	
 	private byte[] hash;
 	private final int epoch;
 	private final int length;
 	private final Transaction[] transactions;
+	private final Block[] parentChain;
+	private boolean notarized;
 	
-	public Block(int epoch, int length, Transaction[] transactions, Block prevBlock) {
+	public Block(int epoch, int length, Transaction[] transactions, Block[] parentChain, Block prevBlock) {
 		this.epoch = epoch;
 		this.length = length;
 		this.transactions = transactions;
+		this.parentChain = parentChain;
 		calculateHash(prevBlock);
 	}
 	
@@ -41,6 +46,14 @@ public class Block implements Serializable{
 			return;
 		}
 		//TODO implement SHA1 hash
+	}
+	
+	public boolean isNotarized() {
+		return notarized;
+	}
+	
+	public void notarize() {
+		notarized = true;
 	}
 
 	@Override

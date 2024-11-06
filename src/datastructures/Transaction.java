@@ -5,6 +5,8 @@ import java.util.Objects;
 
 public class Transaction implements Serializable{
 	
+	private static final long serialVersionUID = -4457816105021087700L;
+	
 	private final int sender;
 	private final int receiver;
 	private final double amount;
