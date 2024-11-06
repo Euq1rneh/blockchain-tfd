@@ -42,7 +42,7 @@ public class Node {
 	private static volatile HashMap<Integer, Socket> nodeSockets = new HashMap<Integer, Socket>();
 	private static volatile HashMap<Integer, ObjectOutputStream> nodeStreams = new HashMap<Integer, ObjectOutputStream>();
 	private static volatile List<Block> blockChain = new ArrayList<Block>(); // only contains finalized blocks
-	private static volatile List<Block> notarizedChain = new ArrayList<Block>(); //only contains notarized blocks
+	private static volatile List<Block> notarizedChain = new ArrayList<Block>(); // only contains notarized blocks
 	public static volatile Queue<Message> votesReceived = new ConcurrentLinkedQueue<Message>();
 
 	public static volatile boolean canDeliver = false;
@@ -194,6 +194,7 @@ public class Node {
 
 	private static void startEpoch() throws IOException {
 		epochScheduler();
+		finalizationScheduler();
 	}
 
 	public static int electLider() {
@@ -225,7 +226,7 @@ public class Node {
 
 		} else {
 			int parentChainSize = notarizedChain.size();
-			
+
 			Block newBlock = new Block(currentEpoch, parentChainSize + 1, null, notarizedChain,
 					notarizedChain.get(parentChainSize - 1));
 
@@ -252,11 +253,12 @@ public class Node {
 			System.out.println("Error delivering message");
 			return null;
 		}
-		processLogger.info("Received message from " + m.getSender() + " of type " + m.getMessageType().toString() + "\n\n"+ "######################\n######################\n" + "NOT-CHAIN-LEN=" + notarizedChain.size()
-		+ "\nBLOCK-NOT-CHAIN-LEN=" + m.getBlock().getLength() + "\n######################\n######################\n");
+		processLogger.info("Received message from " + m.getSender() + " of type " + m.getMessageType().toString()
+				+ "\n\n" + "######################\n######################\n" + "NOT-CHAIN-LEN=" + notarizedChain.size()
+				+ "\nBLOCK-NOT-CHAIN-LEN=" + m.getBlock().getLength()
+				+ "\n######################\n######################\n");
 		System.out.printf("Received message from %d of type %s\n", m.getSender(), m.getMessageType().toString());
-		
-		
+
 		processLogger.info("--------------------- PROPOSE PHASE END ---------------------");
 		System.out.println("--------------------- PROPOSE PHASE END ---------------------");
 
@@ -273,10 +275,6 @@ public class Node {
 			System.out.println("Could not vote. Block in message was null");
 			return;
 		}
-
-//		processLogger.info("######################\n######################\n" + "NOT-CHAIN-LEN=" + notarizedChain.size()
-//				+ "\nBLOCK-NOT-CHAIN-LEN=" + b.getLength() + "\n######################\n######################\n");
-//		System.out.printf("BLOCKCHAIN-LEN=%d\nBLOCK-NOT-CHAIN-LEN=%d", blockChain.size(), b.getLength());
 
 		if (b.getLength() <= notarizedChain.size()) {
 			processLogger.info("Chain size of proposed block is smaller. Rejecting block...");
@@ -308,88 +306,106 @@ public class Node {
 		System.out.println("Final vote count= " + votesReceived.size());
 
 		b.notarize();
+		// should add or
+		// notarizedChain.add(b);
+		// should replace????
+		notarizedChain.clear();
+		notarizedChain.addAll(b.getParentChain());
 		notarizedChain.add(b);
 	}
 
-	private static void epochScheduler() {
-	    Timer timer = new Timer();
-
-	    // Schedule a task to run each epoch
-	    timer.scheduleAtFixedRate(new TimerTask() {
-	        @Override
-	        public void run() {
-	        	canDeliver = false;
-	            currentEpoch++;
-				votesReceived.clear();
-//				currentEpochMessage = null;
+	private static void finalizeChain() {
+		if(notarizedChain.size() - 1 < 3) {
+			processLogger.info("FINALIZE: Could not finalize chain. Not enough blocks");
+			System.out.println("FINALIZE: Could not finalize chain. Not enough blocks");
+			return;
+		}
+		
+		int index = notarizedChain.size() - 1;
+		Block final1 = notarizedChain.get(index);
+		index--;
+		Block final2 = notarizedChain.get(index);
+		index--;
+		Block final3 = notarizedChain.get(index);
+		
+		if(final1.getEpoch() == (final2.getEpoch()+1) && final2.getEpoch() == (final3.getEpoch() + 1)) {
+			if((notarizedChain.size() - 1) > blockChain.size()) {
+				blockChain.clear();
+				blockChain.addAll(notarizedChain);
+				blockChain.removeLast();
 				
-				processLogger.info("STARTING EPOCH " + currentEpoch);
-				System.out.println("###########################################\n"
-				        + " STARTING EPOCH " + currentEpoch
-				        + "\n###########################################");
-
-				// Step 1: Propose phase
-				electLider();
-				currentEpochMessage = propose();
-
-				// Step 2: Schedule Vote phase after roundDurationSec
-				timer.schedule(new TimerTask() {
-				    @Override
-				    public void run() {
-				        try {
-				            vote(currentEpochMessage);
-				        } catch (IOException e) {
-				            e.printStackTrace();
-				        }
-				    }
-				}, roudDurationSec * 1000); // delay equal to roundDurationSec in milliseconds
-	        }
-	    }, 0, roudDurationSec * 2 * 1000); // Epoch duration: 2 * roundDurationSec (one for each round)
-
-	    // Optional: Add shutdown hook to stop the timer when the program exits
-	    Runtime.getRuntime().addShutdownHook(new Thread(timer::cancel));
+				StringBuilder sb = new StringBuilder();
+				sb.append("⊥");
+				for (int i = 1; i < blockChain.size(); i++) {
+					sb.append(" -> epoch " + blockChain.get(i).getEpoch());
+				}
+				processLogger.info("FINALIZE: Finalized a new chain:" + sb.toString());
+				System.out.println("FINALIZE: Finalized a new chain:" + sb.toString());
+				return;
+			}
+			
+			StringBuilder sb = new StringBuilder();
+			sb.append("⊥");
+			for (int i = 1; i < notarizedChain.size(); i++) {
+				sb.append(" -> epoch " + notarizedChain.get(i).getEpoch());
+			}
+			
+			processLogger.info("FINALIZED: Nothing new to notarize => " + sb.toString());
+			System.out.println("FINALIZED: Nothing new to notarize => " + sb.toString());
+			return;
+		}
+		
+		processLogger.info("FINALIZE: Last three blocks where not from consecutive epochs. Chain was not finalized\n");
+		System.out.println("FINALIZE: Last three blocks where not from consecutive epochs. Chain was not finalized\n");
 	}
 
-	private static void proposeRoundScheduler() {
+	private static void epochScheduler() {
 		Timer timer = new Timer();
 
-		// Schedule a task to run every 5 seconds
+		// Schedule a task to run each epoch
 		timer.scheduleAtFixedRate(new TimerTask() {
 			@Override
 			public void run() {
-				// Your code snippet to execute every 5 seconds
+				canDeliver = false;
+				currentEpoch++;
+				votesReceived.clear();
+
+				processLogger.info("###########################################\n" + " STARTING EPOCH " + currentEpoch
+						+ "\n###########################################");
+				System.out.println("###########################################\n" + " STARTING EPOCH " + currentEpoch
+						+ "\n###########################################");
 
 				electLider();
 				currentEpochMessage = propose();
 
-//				System.out.println("Executing task at " + System.currentTimeMillis());
+				timer.schedule(new TimerTask() {
+					@Override
+					public void run() {
+						try {
+							vote(currentEpochMessage);
+						} catch (IOException e) {
+							e.printStackTrace();
+						}
+					}
+				}, roudDurationSec * 1000); // delay equal to roundDurationSec in milliseconds
 			}
-		}, 0, roudDurationSec * 1000); // Initial delay of roundDurationSec ms, repeat every roundDurationSec ms
+		}, 0, roudDurationSec * 2 * 1000); // Epoch duration: 2 * roundDurationSec (one for each round)
 
 		// Optional: Add shutdown hook to stop the timer when the program exits
 		Runtime.getRuntime().addShutdownHook(new Thread(timer::cancel));
-
 	}
 
-	private static void voteRoundScheduler() {
+	private static void finalizationScheduler() {
 		Timer timer = new Timer();
 
 		// Schedule a task to run every 5 seconds
 		timer.scheduleAtFixedRate(new TimerTask() {
 			@Override
 			public void run() {
-				// Your code snippet to execute every 5 seconds
-				try {
-					vote(currentEpochMessage);
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-//				System.out.println("Executing task at " + System.currentTimeMillis());
+				finalizeChain();
 			}
-		}, roudDurationSec * 1000, roudDurationSec * 1000); // Initial delay of roundDurationSec ms, repeat every
-															// roundDurationSec ms
+		}, 0, roudDurationSec * 1000); // Initial delay of roundDurationSec ms, repeat every roundDurationSec ms
 
-		// Optional: Add shutdown hook to stop the timer when the program exits
 		Runtime.getRuntime().addShutdownHook(new Thread(timer::cancel));
 	}
 
@@ -412,7 +428,7 @@ public class Node {
 		Block genesisBlock = new Block(0, 0, null, null, null);
 		blockChain.add(genesisBlock);
 		notarizedChain.add(genesisBlock);
-		
+
 		bm = new BroadcastManager(nodeId);
 		try {
 			ProcessLogger.setupLogger("process-log-node" + nodeId);
