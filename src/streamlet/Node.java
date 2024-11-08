@@ -30,12 +30,12 @@ import broadcast.BroadcastManager;
 import datastructures.Block;
 import datastructures.Message;
 import datastructures.MessageType;
+import datastructures.Transaction;
 
 public class Node {
 
 	private static int nodeId;
 	private static String selfAddress;
-	private static int selfPort;
 	private static HashMap<Integer, String> allNodes = new HashMap<Integer, String>(); // List of all nodes read from
 																						// file
 
@@ -226,8 +226,15 @@ public class Node {
 
 		} else {
 			int parentChainSize = notarizedChain.size();
-
-			Block newBlock = new Block(currentEpoch, parentChainSize + 1, null, notarizedChain,
+			
+			Random rd = new Random();
+			int receiverId = rd.nextInt() % nodeSockets.size();
+			int tAmount = rd.nextInt() * 15;
+			
+			Transaction[] transactions = new Transaction[1];
+			transactions[0] = new Transaction(nodeId, receiverId, tAmount);
+			
+			Block newBlock = new Block(currentEpoch, parentChainSize + 1, transactions, notarizedChain,
 					notarizedChain.get(parentChainSize - 1));
 
 			// multicast of newBlock

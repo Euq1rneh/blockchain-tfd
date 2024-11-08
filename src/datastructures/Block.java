@@ -1,6 +1,11 @@
 package datastructures;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -13,7 +18,7 @@ public class Block implements Serializable{
 	private final int epoch;
 	private final int length;
 	private final Transaction[] transactions;
-	private final List<Block> parentChain;
+	private final List<Block> parentChain; // to avoid sending another message
 	private boolean notarized;
 	
 	public Block(int epoch, int length, Transaction[] transactions, List<Block> parentChain, Block prevBlock) {
@@ -46,7 +51,15 @@ public class Block implements Serializable{
 			hash = new byte[] {0x00};
 			return;
 		}
-		//TODO implement SHA1 hash
+	    
+	    try {
+	        MessageDigest md = MessageDigest.getInstance("SHA-1");
+	        md.update(getBytes());
+	        hash = md.digest();
+	    } catch (NoSuchAlgorithmException e) {
+	        throw new RuntimeException("SHA-1 algorithm not available", e);
+	    }
+		
 	}
 	
 	public boolean isNotarized() {
@@ -59,6 +72,20 @@ public class Block implements Serializable{
 
 	public List<Block> getParentChain(){
 		return parentChain;
+	}
+	
+	public byte[] getBytes() {
+	    try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
+	         ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+	        
+	        oos.writeObject(this);
+	        oos.flush();
+	        
+	        return bos.toByteArray();
+	        
+	    } catch (IOException e) {
+	        throw new RuntimeException("Error converting Block to bytes", e);
+	    }
 	}
 
 	@Override

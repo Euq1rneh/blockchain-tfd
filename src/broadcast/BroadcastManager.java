@@ -15,6 +15,8 @@ import streamlet.Node;
 
 public class BroadcastManager {
 
+	//Podemos usar uma message queue para processar as mensagens numa unica thread
+	
 	private Message lastMessage = null;
 	private List<Message> lastMessages = new ArrayList<Message>();
 	private int broadcasterId; // own ID

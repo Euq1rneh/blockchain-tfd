@@ -2,22 +2,22 @@
 ### Course: MEI/MI/MSI 2024/25
 
 ## Project Overview
-This project involves implementing a fault-tolerant distributed system using the **Streamlet consensus algorithm** and Java21(**!!!CONFIMAR!!!!**), designed for blockchain replication. The project is divided into two phases:
+This project involves implementing a fault-tolerant distributed system using the **Streamlet consensus algorithm** and Java, designed for blockchain replication. The project is divided into two phases:
 1. **Phase 1**: Basic implementation of the Streamlet protocol with crash fault tolerance.
 2. **Phase 2**: Enhanced implementation including node delays, missed epochs, and crash-recovery capabilities.
 
-## Objective
-The goal is to develop a distributed ledger with fault-tolerant properties, simulating a consensus algorithm where transactions are generated and recorded in distributed nodes, ensuring consistency and fault tolerance.
+The algorithm used works in epochs, an epoch is 2Δ rounds of equal duration. We considered Δ to be the duration of a round.
+
+A logger is used to simplify the debbuging process and a log file is created for each node.
 
 ## Project Structure
-- **Node Library**: Each node operates as an independent process that creates, orders, and verifies blocks.
+- **Node**: Each node operates as an independent process that creates, orders, and verifies blocks.
 - **Streamlet Protocol Implementation**: Nodes communicate through a propose-vote-finalize system, handling epochs to achieve consensus on the blockchain.
 
 ## Files in This Repository
 - `src/`: Source code files for the project.
 - `dist/`: Directory where the executable will be
 - `docs/`: Directory containing any project related documents
-- `README.md`: This file, explaining how to set up and run the system.
 - `compilation-script`: Script to compile all source files into a single jar file
 - `config.txt`: Configuration file that contains the necessary parameters to run the program.
 - `peers.txt`: Configuration file that contains the `ID`, `IP`, `Port` of each of the nodes in the network
@@ -48,4 +48,6 @@ The `config.txt` should look something like this:
     ```
     Replace `peerFile`, `configFile` with the paths for those files and `peerID` with the appropriate ID contained in your `peerFile`.
 
+## Shortcommings
+- Phase 1: Nothing to report. All requirements met.
 
