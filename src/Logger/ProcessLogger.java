@@ -11,7 +11,7 @@ import java.util.logging.LogRecord;
 
 public class ProcessLogger {
 
-	public static final Logger logger = Logger.getLogger(ProcessLogger.class.getName());
+	private static final Logger logger = Logger.getLogger(ProcessLogger.class.getName());
 
 	public static void setupLogger(String logFilename) throws IOException {
 		LogManager.getLogManager().reset();
@@ -32,4 +32,18 @@ public class ProcessLogger {
 		logger.setLevel(Level.INFO);
 	}
 
+	public static void log(String message, LoggerSeverity severity) {
+		
+		switch (severity) {
+		case LoggerSeverity.SEVERE:
+			
+			break;
+
+		case LoggerSeverity.INFO:
+			logger.info(message);
+			break;
+		}
+		
+		System.out.println(message);
+	}
 }

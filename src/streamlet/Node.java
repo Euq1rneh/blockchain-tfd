@@ -12,19 +12,16 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
-import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
 
-import Logger.ErrorLogger;
+import Logger.LoggerSeverity;
 import Logger.ProcessLogger;
 import broadcast.BroadcastManager;
 import datastructures.Block;
@@ -59,8 +56,6 @@ public class Node {
 
 	private static Random rd;
 
-	private static Logger processLogger = ProcessLogger.logger;
-
 	private static void waitForStartTime() {
 		try {
 			SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
@@ -78,8 +73,7 @@ public class Node {
 
 			long waitTime = targetTime.getTime() - currentTime.getTime();
 			if (waitTime > 0) {
-				processLogger.info("Waiting until start time: " + startTime);
-				System.out.println("Waiting until start time: " + startTime);
+				ProcessLogger.log("Waiting until start time: " + startTime, LoggerSeverity.INFO);
 				TimeUnit.MILLISECONDS.sleep(waitTime);
 			}
 		} catch (Exception e) {
@@ -95,8 +89,7 @@ public class Node {
 			return false;
 		}
 
-		try {
-			BufferedReader br = new BufferedReader(new FileReader(file));
+		try (BufferedReader br = new BufferedReader(new FileReader(file))) {
 			String line;
 			while ((line = br.readLine()) != null) {
 				if (line.contains("//")) {
@@ -113,6 +106,9 @@ public class Node {
 		} catch (IOException e) {
 			System.out.println("Error trying to read nodes file");
 			return false;
+		} catch (NumberFormatException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
 		return true;
 	}
@@ -125,8 +121,7 @@ public class Node {
 			return false;
 		}
 
-		try {
-			BufferedReader br = new BufferedReader(new FileReader(file));
+		try (BufferedReader br = new BufferedReader(new FileReader(file))) {
 			String line;
 			while ((line = br.readLine()) != null) {
 				String[] args = line.split("=");
@@ -149,6 +144,9 @@ public class Node {
 		} catch (IOException e) {
 			System.out.println("Error trying to read config file");
 			return false;
+		} catch (NumberFormatException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
 
 		return true;
@@ -166,8 +164,7 @@ public class Node {
 
 				stream.flush();
 
-				processLogger.info("Connected to " + nodeAddress);
-				System.out.printf("Connected to %s\n", nodeAddress);
+				ProcessLogger.log("Connected to " + nodeAddress, LoggerSeverity.INFO);
 
 				nodeSockets.put(id, s);
 				nodeStreams.put(id, stream);
@@ -178,8 +175,7 @@ public class Node {
 	}
 
 	public static void close() {
-		processLogger.info("Closing Node");
-		System.out.println("CLOSING NODE");
+		ProcessLogger.log("Closing Node", LoggerSeverity.INFO);
 		for (Map.Entry<Integer, Socket> entry : nodeSockets.entrySet()) {
 			Socket socket = entry.getValue();
 			try {
@@ -194,46 +190,39 @@ public class Node {
 
 	private static void startEpoch() throws IOException {
 		epochScheduler();
-		finalizationScheduler();
+		// finalizationScheduler();
 	}
 
 	public static int electLider() {
-		processLogger.info("Electing new Lider (available nodes " + nodeStreams.size() + ")...");
-		System.out.printf("Electing new Lider (available nodes %d)...\n", nodeStreams.size());
+		ProcessLogger.log("Electing new Lider (available nodes " + nodeStreams.size() + ")...", LoggerSeverity.INFO);
 		int index = rd.nextInt(100) % nodeStreams.size();
 
 		int[] keyArray = nodeStreams.keySet().stream().mapToInt(Integer::intValue).toArray();
 
 		currentLider = keyArray[index];
 
-		processLogger.info("New Lider is " + keyArray[index]);
-		System.out.printf("New Lider is %d\n", keyArray[index]);
-
+		ProcessLogger.log("New Lider is " + keyArray[index], LoggerSeverity.INFO);
 		return currentLider;
 	}
 
 	private static Message propose() {
 		Message m;
-		processLogger.info("--------------------- PROPOSE PHASE  ---------------------");
-		System.out.println("--------------------- PROPOSE PHASE  ---------------------");
+		// ProcessLogger.log("--------------------- PROPOSE PHASE
+		// ---------------------", LoggerSeverity.INFO);
 
 		if (currentLider != nodeId) {
-			processLogger.info("Is not current epoch Lider");
-			processLogger.info("Waiting for proposed block");
-
-			System.out.println("Is not current epoch Lider");
-			System.out.println("Waiting for proposed block");
+			ProcessLogger.log("Is not current epoch Lider\n\"Waiting for proposed block\"", LoggerSeverity.INFO);
 
 		} else {
 			int parentChainSize = notarizedChain.size();
-			
+
 			Random rd = new Random();
 			int receiverId = rd.nextInt() % nodeSockets.size();
 			int tAmount = rd.nextInt() * 15;
-			
+
 			Transaction[] transactions = new Transaction[1];
 			transactions[0] = new Transaction(nodeId, receiverId, tAmount);
-			
+
 			Block newBlock = new Block(currentEpoch, parentChainSize + 1, transactions, notarizedChain,
 					notarizedChain.get(parentChainSize - 1));
 
@@ -241,8 +230,7 @@ public class Node {
 			m = new Message(MessageType.PROPOSE, nodeId, null, newBlock);
 
 			for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
-				processLogger.info("Sending message to node with ID " + entry.getKey());
-				System.out.printf("\033[34mSending\033[0m message to node with ID %d\n", entry.getKey());
+//				ProcessLogger.log("Sending message to node with ID " + entry.getKey(), LoggerSeverity.INFO);
 				ObjectOutputStream stream = entry.getValue();
 
 				bm.send(m, stream);
@@ -252,30 +240,34 @@ public class Node {
 
 		while (!canDeliver)
 			;
-		processLogger.info("Delivering message");
-		System.out.println("Delivering message");
+		ProcessLogger.log("Delivering message", LoggerSeverity.INFO);
 		m = bm.deliver();
 
 		if (m == null) {
 			System.out.println("Error delivering message");
 			return null;
 		}
-		processLogger.info("Received message from " + m.getSender() + " of type " + m.getMessageType().toString()
+
+		ProcessLogger.log("Received message from " + m.getSender() + " of type " + m.getMessageType().toString()
 				+ "\n\n" + "######################\n######################\n" + "NOT-CHAIN-LEN=" + notarizedChain.size()
 				+ "\nBLOCK-NOT-CHAIN-LEN=" + m.getBlock().getLength()
-				+ "\n######################\n######################\n");
-		System.out.printf("Received message from %d of type %s\n", m.getSender(), m.getMessageType().toString());
+				+ "\n######################\n######################\n", LoggerSeverity.INFO);
 
-		processLogger.info("--------------------- PROPOSE PHASE END ---------------------");
-		System.out.println("--------------------- PROPOSE PHASE END ---------------------");
+		ProcessLogger.log("--------------------- PROPOSE PHASE END ---------------------", LoggerSeverity.INFO);
 
 		return m;
 	}
 
 	private static void vote(Message m) throws IOException {
-		processLogger.info("--------------------- VOTE PHASE ---------------------");
-		System.out.println("--------------------- VOTE PHASE ---------------------");
+		
+//		ProcessLogger.log("--------------------- VOTE PHASE ---------------------", LoggerSeverity.INFO);
 		// receive proposed block from leader
+		
+		if(m == null) {
+			ProcessLogger.log("Message was null", LoggerSeverity.INFO);
+			return;
+		}
+		
 		Block b = m.getBlock();
 
 		if (b == null) {
@@ -284,8 +276,7 @@ public class Node {
 		}
 
 		if (b.getLength() <= notarizedChain.size()) {
-			processLogger.info("Chain size of proposed block is smaller. Rejecting block...");
-			System.out.println("Chain size of proposed block is smaller. Rejecting block...");
+			ProcessLogger.log("Chain size of proposed block is smaller. Rejecting block...", LoggerSeverity.INFO);
 			// no vote
 			return;
 		}
@@ -293,24 +284,19 @@ public class Node {
 		Message vote = new Message(MessageType.VOTE, nodeId, null, b);
 
 		for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
-			processLogger.info("Sending Vote message to node with ID " + entry.getKey());
-			System.out.printf("\033[35mVoting\033[0m message to node with ID %d\n", entry.getKey());
+//			ProcessLogger.log("Sending Vote message to node with ID " + entry.getKey(), LoggerSeverity.INFO);
 			ObjectOutputStream stream = entry.getValue();
 			bm.send(vote, stream);
 		}
 
-		processLogger.info("Waiting to receive necessary votes");
-		System.out.println("Waiting to receive necessary votes");
+		ProcessLogger.log("Waiting to receive necessary votes", LoggerSeverity.INFO);
 
 		while (votesReceived.size() <= (int) (nodeStreams.size() / 2))
 			;
 
 		// if received n/2 votes block is notarize it
-		processLogger.info("--------------------- VOTE PHASE  END ---------------------");
-		System.out.println("--------------------- VOTE PHASE  END ---------------------");
+//		ProcessLogger.log("--------------------- VOTE PHASE  END ---------------------", LoggerSeverity.INFO);
 
-		processLogger.info("Final vote count= " + votesReceived.size());
-		System.out.println("Final vote count= " + votesReceived.size());
 
 		b.notarize();
 		// should add or
@@ -319,51 +305,49 @@ public class Node {
 		notarizedChain.clear();
 		notarizedChain.addAll(b.getParentChain());
 		notarizedChain.add(b);
+		
+		finalizeChain();
 	}
 
 	private static void finalizeChain() {
-		if(notarizedChain.size() - 1 < 3) {
-			processLogger.info("FINALIZE: Could not finalize chain. Not enough blocks");
-			System.out.println("FINALIZE: Could not finalize chain. Not enough blocks");
+		if (notarizedChain.size() - 1 < 3) {
+			ProcessLogger.log("FINALIZE: Could not finalize chain. Not enough blocks", LoggerSeverity.INFO);
 			return;
 		}
-		
+
 		int index = notarizedChain.size() - 1;
 		Block final1 = notarizedChain.get(index);
 		index--;
 		Block final2 = notarizedChain.get(index);
 		index--;
 		Block final3 = notarizedChain.get(index);
-		
-		if(final1.getEpoch() == (final2.getEpoch()+1) && final2.getEpoch() == (final3.getEpoch() + 1)) {
-			if((notarizedChain.size() - 1) > blockChain.size()) {
+
+		if (final1.getEpoch() == (final2.getEpoch() + 1) && final2.getEpoch() == (final3.getEpoch() + 1)) {
+			if ((notarizedChain.size() - 1) > blockChain.size()) {
 				blockChain.clear();
 				blockChain.addAll(notarizedChain);
 				blockChain.removeLast();
-				
+
 				StringBuilder sb = new StringBuilder();
 				sb.append("⊥");
 				for (int i = 1; i < blockChain.size(); i++) {
 					sb.append(" -> epoch " + blockChain.get(i).getEpoch());
 				}
-				processLogger.info("FINALIZE: Finalized a new chain:" + sb.toString());
-				System.out.println("FINALIZE: Finalized a new chain:" + sb.toString());
+				ProcessLogger.log("FINALIZE: Finalized a new chain:" + sb.toString(), LoggerSeverity.INFO);
 				return;
 			}
-			
-			StringBuilder sb = new StringBuilder();
-			sb.append("⊥");
-			for (int i = 1; i < notarizedChain.size(); i++) {
-				sb.append(" -> epoch " + notarizedChain.get(i).getEpoch());
-			}
-			
-			processLogger.info("FINALIZED: Nothing new to notarize => " + sb.toString());
-			System.out.println("FINALIZED: Nothing new to notarize => " + sb.toString());
+
+//			StringBuilder sb = new StringBuilder();
+//			sb.append("⊥");
+//			for (int i = 1; i < notarizedChain.size(); i++) {
+//				sb.append(" -> epoch " + notarizedChain.get(i).getEpoch());
+//			}
+
+			ProcessLogger.log("FINALIZED: Nothing new to notarize", LoggerSeverity.INFO);
 			return;
 		}
-		
-		processLogger.info("FINALIZE: Last three blocks where not from consecutive epochs. Chain was not finalized\n");
-		System.out.println("FINALIZE: Last three blocks where not from consecutive epochs. Chain was not finalized\n");
+
+		ProcessLogger.log("FINALIZE: Last three blocks where not from consecutive epochs. Chain was not finalized\n", LoggerSeverity.INFO);
 	}
 
 	private static void epochScheduler() {
@@ -377,10 +361,10 @@ public class Node {
 				currentEpoch++;
 				votesReceived.clear();
 
-				processLogger.info("###########################################\n" + " STARTING EPOCH " + currentEpoch
-						+ "\n###########################################");
-				System.out.println("###########################################\n" + " STARTING EPOCH " + currentEpoch
-						+ "\n###########################################");
+				
+				ProcessLogger.log("###########################################\n" + " STARTING EPOCH " + currentEpoch
+						+ "\n###########################################", LoggerSeverity.INFO);
+				
 
 				electLider();
 				currentEpochMessage = propose();
@@ -395,24 +379,11 @@ public class Node {
 						}
 					}
 				}, roudDurationSec * 1000); // delay equal to roundDurationSec in milliseconds
+				//finalizeChain();
 			}
 		}, 0, roudDurationSec * 2 * 1000); // Epoch duration: 2 * roundDurationSec (one for each round)
 
 		// Optional: Add shutdown hook to stop the timer when the program exits
-		Runtime.getRuntime().addShutdownHook(new Thread(timer::cancel));
-	}
-
-	private static void finalizationScheduler() {
-		Timer timer = new Timer();
-
-		// Schedule a task to run every 5 seconds
-		timer.scheduleAtFixedRate(new TimerTask() {
-			@Override
-			public void run() {
-				finalizeChain();
-			}
-		}, 0, roudDurationSec * 1000); // Initial delay of roundDurationSec ms, repeat every roundDurationSec ms
-
 		Runtime.getRuntime().addShutdownHook(new Thread(timer::cancel));
 	}
 

@@ -6,9 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.logging.Logger;
 
-import Logger.ProcessLogger;
 import datastructures.Message;
 import datastructures.MessageType;
 import streamlet.Node;
@@ -20,8 +18,6 @@ public class BroadcastManager {
 	private Message lastMessage = null;
 	private List<Message> lastMessages = new ArrayList<Message>();
 	private int broadcasterId; // own ID
-
-	private Logger processLogger = ProcessLogger.logger;
 	
 	public BroadcastManager(int broadcasterId) {
 		this.broadcasterId = broadcasterId;
@@ -29,21 +25,17 @@ public class BroadcastManager {
 
 	public synchronized void receive(HashMap<Integer, ObjectOutputStream> echoNodes, Message m) throws IOException {
 		
-		processLogger.info("-------------- BroadcastManager.receive() --------------");
-		System.out.println("-------------- BroadcastManager.receive() --------------");
-		processLogger.info("Analysing received message...");
-		System.out.println("Analysing received message...");
+//		ProcessLogger.log("-------------- BroadcastManager.receive() --------------", LoggerSeverity.INFO);
+//		ProcessLogger.log("Analysing received message...", LoggerSeverity.INFO);
 		
 		// retrieve inner message (perguntar prof)
 		if (m.getMessageType().equals(MessageType.ECHO)) {
-			processLogger.info("Message type is ECHO. Retrieving inner message...");
-			System.out.println("Message type is ECHO. Retrieving inner message...");
+//			ProcessLogger.log("Message type is ECHO. Retrieving inner message...", LoggerSeverity.INFO);
 			m = m.getMessage();			
 		}
 
 		if (m.getMessageType().equals(MessageType.VOTE)) {
-			processLogger.info("Message type is VOTE. Adding to votes...");
-			System.out.println("Message type is VOTE. Adding to votes...");
+//			ProcessLogger.log("Message type is VOTE. Adding to votes...", LoggerSeverity.INFO);
 			if (Node.votesReceived.contains(m)) {
 				return;
 			}
@@ -51,13 +43,11 @@ public class BroadcastManager {
 		}
 		
 		if (lastMessage != null && lastMessage.equals(m)) {
-			processLogger.info("Received message is equal to last message skipping echo process");
-			System.out.println("Received message is equal to last message skipping echo process");
+//			ProcessLogger.log("Received message is equal to last message skipping echo process", LoggerSeverity.INFO);
 			return;
 		}
 
-		processLogger.info("Received message is new starting echo process...");
-		System.out.println("Received message is new starting echo process...");
+//		ProcessLogger.log("Received message is new starting echo process...", LoggerSeverity.INFO);
 		Message echoMsg = new Message(MessageType.ECHO, broadcasterId, m, null);
 
 		for (Map.Entry<Integer, ObjectOutputStream> entry : echoNodes.entrySet()) {
@@ -65,21 +55,18 @@ public class BroadcastManager {
 			ObjectOutputStream stream = entry.getValue();
 
 			if (id == broadcasterId || id == m.getSender()) {
-				processLogger.info("Skipping current node with ID " + id +"(same ID as message sender/is this node)");
-				System.out.printf("Skipping current node with ID %d(same ID as message sender/is this node)\n", id);
+//				ProcessLogger.log("Skipping current node with ID " + id +"(same ID as message sender/is this node)", LoggerSeverity.INFO);
 				continue;
 			}
-			processLogger.info("Echoing message to node with ID "+ entry.getKey());
-			System.out.printf("\033[33mEchoing\033[0m message to node with ID %d\n", entry.getKey());
-
+//			ProcessLogger.log("Echoing message to node with ID "+ entry.getKey(), LoggerSeverity.INFO);
 			send(echoMsg, stream);
 		}
 
 		if(m.getMessageType().equals(MessageType.PROPOSE)) {
 			lastMessage = m;	
 		}
-		processLogger.info("-------------- BroadcastManager.receive() END --------------");
-		System.out.println("-------------- BroadcastManager.receive() END --------------");
+		
+//		ProcessLogger.log("-------------- BroadcastManager.receive() END --------------", LoggerSeverity.INFO);
 	}
 
 	public synchronized void send(Message m, ObjectOutputStream stream){
