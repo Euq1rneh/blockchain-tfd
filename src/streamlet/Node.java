@@ -253,7 +253,7 @@ public class Node {
 				+ "\nBLOCK-NOT-CHAIN-LEN=" + m.getBlock().getLength()
 				+ "\n######################\n######################\n", LoggerSeverity.INFO);
 
-		ProcessLogger.log("--------------------- PROPOSE PHASE END ---------------------", LoggerSeverity.INFO);
+//		ProcessLogger.log("--------------------- PROPOSE PHASE END ---------------------", LoggerSeverity.INFO);
 
 		return m;
 	}
@@ -296,14 +296,17 @@ public class Node {
 
 		// if received n/2 votes block is notarize it
 //		ProcessLogger.log("--------------------- VOTE PHASE  END ---------------------", LoggerSeverity.INFO);
-
+		
+		ProcessLogger.log("Necessary votes received. Notarizing block...", LoggerSeverity.INFO);
 
 		b.notarize();
 		// should add or
 		// notarizedChain.add(b);
 		// should replace????
-		notarizedChain.clear();
-		notarizedChain.addAll(b.getParentChain());
+//		notarizedChain.clear();
+//		notarizedChain.addAll(b.getParentChain());
+//		notarizedChain.add(b);
+		notarizedChain = new ArrayList<Block>(b.getParentChain());//leave garbage to gc
 		notarizedChain.add(b);
 		
 		finalizeChain();
@@ -324,7 +327,7 @@ public class Node {
 
 		if (final1.getEpoch() == (final2.getEpoch() + 1) && final2.getEpoch() == (final3.getEpoch() + 1)) {
 			if ((notarizedChain.size() - 1) > blockChain.size()) {
-				blockChain.clear();
+				blockChain = new ArrayList<Block>(); //leave the cleaning to the garbage collector
 				blockChain.addAll(notarizedChain);
 				blockChain.removeLast();
 
@@ -337,17 +340,22 @@ public class Node {
 				return;
 			}
 
-//			StringBuilder sb = new StringBuilder();
-//			sb.append("⊥");
-//			for (int i = 1; i < notarizedChain.size(); i++) {
-//				sb.append(" -> epoch " + notarizedChain.get(i).getEpoch());
-//			}
+			StringBuilder sb = new StringBuilder();
+			sb.append("⊥");
+			for (int i = 1; i < notarizedChain.size(); i++) {
+				sb.append(" -> epoch " + notarizedChain.get(i).getEpoch());
+			}
 
-			ProcessLogger.log("FINALIZED: Nothing new to notarize", LoggerSeverity.INFO);
+			ProcessLogger.log("FINALIZED: Nothing new to notarize\nCurrent notarized chain:\n" +  sb.toString(), LoggerSeverity.INFO);
 			return;
 		}
+		StringBuilder sb = new StringBuilder();
+		sb.append("⊥");
+		for (int i = 1; i < notarizedChain.size(); i++) {
+			sb.append(" -> epoch " + notarizedChain.get(i).getEpoch());
+		}
 
-		ProcessLogger.log("FINALIZE: Last three blocks where not from consecutive epochs. Chain was not finalized\n", LoggerSeverity.INFO);
+		ProcessLogger.log("FINALIZE: Last three blocks where not from consecutive epochs. Chain was not finalized\nCurrent notarized chain:\n" +  sb.toString(), LoggerSeverity.INFO);
 	}
 
 	private static void epochScheduler() {
@@ -362,7 +370,7 @@ public class Node {
 				votesReceived.clear();
 
 				
-				ProcessLogger.log("###########################################\n" + " STARTING EPOCH " + currentEpoch
+				ProcessLogger.log("\n###########################################\n" + " STARTING EPOCH " + currentEpoch
 						+ "\n###########################################", LoggerSeverity.INFO);
 				
 
@@ -378,10 +386,10 @@ public class Node {
 							e.printStackTrace();
 						}
 					}
-				}, roudDurationSec * 1000); // delay equal to roundDurationSec in milliseconds
+				}, (roudDurationSec + 1) * 1000); // delay equal to roundDurationSec in milliseconds + 1 for finalization
 				//finalizeChain();
 			}
-		}, 0, roudDurationSec * 2 * 1000); // Epoch duration: 2 * roundDurationSec (one for each round)
+		}, 0, (roudDurationSec * 2 + 1 )* 1000); // Epoch duration: 2 * roundDurationSec (one for each round)
 
 		// Optional: Add shutdown hook to stop the timer when the program exits
 		Runtime.getRuntime().addShutdownHook(new Thread(timer::cancel));
