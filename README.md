@@ -44,7 +44,7 @@ The `config.txt` should look something like this:
     ```
 3. **Run the program**: If your peer.txt file contains 5 lines (which correspond to 5 different nodes), you'll need to run 5 instances of the program with the following line (assuming you're in the root directory):
     ```bash
-    java -jar /dist/streamlet.jar <peerFile> <configFile> <peerID>
+    java -jar /dist/streamlet.jar <peerID> <peerFile> <configFile>
     ```
     Replace `peerFile`, `configFile` with the paths for those files and `peerID` with the appropriate ID contained in your `peerFile`.
 

@@ -35,11 +35,11 @@ public class ProcessLogger {
 	public static void log(String message, LoggerSeverity severity) {
 		
 		switch (severity) {
-		case LoggerSeverity.SEVERE:
+		case SEVERE:
 			
 			break;
 
-		case LoggerSeverity.INFO:
+		case INFO:
 			logger.info(message);
 			break;
 		}
