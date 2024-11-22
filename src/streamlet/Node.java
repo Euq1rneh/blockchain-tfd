@@ -50,7 +50,10 @@ public class Node {
 	private static String startTime; // Configured start time for connections
 	private static int seed;
 	private static int roudDurationSec;
-
+	private static int recoveryRounds;
+	
+	public static boolean recoveryRequest;
+	public static int roundsToRecover;
 	public static int currentEpoch;
 	public static int currentLider;
 	public static Message currentEpochMessage;
@@ -149,7 +152,10 @@ public class Node {
 				case "start_time":
 					startTime = args[1];
 					break;
-
+					
+				case "recovery_rounds":
+					recoveryRounds = Integer.parseInt(args[1]);
+					break;
 				}
 			}
 		} catch (IOException e) {
@@ -351,7 +357,64 @@ public class Node {
 						+ sb.toString(),
 				LoggerSeverity.INFO);
 	}
+	
+	public static void answerRecovery(int sender) {
+		
+		Message m = new Message(nodeId, blockChain, notarizedChain, currentEpoch);
+		
+		String nodeAddress = allNodes.get(sender);
 
+		String[] args = nodeAddress.split(":");
+		
+		try {
+			Socket s = new Socket(args[0], Integer.parseInt(args[1]));
+			ObjectOutputStream stream = new ObjectOutputStream(s.getOutputStream());
+
+			stream.flush();
+
+			ProcessLogger.log("Connected to " + nodeAddress, LoggerSeverity.INFO);
+
+			nodeSockets.put(sender, s);
+			nodeStreams.put(sender, stream);
+		} catch (IOException e) {
+			System.out.printf("Could not connect to node with address %s\n", nodeAddress);
+		}
+		
+		bm.send(m, nodeStreams.get(sender));
+				
+	}
+
+	private static void sendRecovery() {
+
+		Message m = new Message(MessageType.RECOVERY, nodeId);
+		
+		for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
+//			ProcessLogger.log("Sending message to node with ID " + entry.getKey(), LoggerSeverity.INFO);
+			ObjectOutputStream stream = entry.getValue();
+
+			bm.send(m, stream);
+
+		}
+		
+	}
+	
+	public synchronized static void receiveRecovery(Message m) {
+		
+		blockChain = m.getBlockchain();
+		notarizedChain = m.getNotarizechain();
+		currentEpoch = m.getEpochNumber();
+		recoveryRequest = true;
+		
+		// calcular o tempo de inicio de scheduler (Incio + numeroR * TempoE)
+		
+		try {
+			startEpoch();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+	}
+	
 	private static void epochScheduler() {
 		Timer timer = new Timer();
 
@@ -359,6 +422,13 @@ public class Node {
 		timer.scheduleAtFixedRate(new TimerTask() {
 			@Override
 			public void run() {
+				if (recoveryRequest) {
+					roundsToRecover += recoveryRounds;
+					recoveryRequest = false;
+				}
+				if (roundsToRecover > 0) {
+					roundsToRecover--;
+				}
 				currentEpoch++;
 				currentEpochMessage = null;
 				currentBlockToVote = null;
@@ -411,6 +481,9 @@ public class Node {
 		System.out.printf("Node ID: %d\n", nodeId);
 
 		if (shouldEnterRecoveryMode()) {
+			connectToNode();
+			//send recovery message
+			sendRecovery();
 
 		} else {
 			waitForStartTime();
@@ -423,5 +496,4 @@ public class Node {
 		}
 
 	}
-
 }

@@ -1,6 +1,7 @@
 package datastructures;
 
 import java.io.Serializable;
+import java.util.List;
 import java.util.Objects;
 
 public class Message implements Serializable{
@@ -12,11 +13,36 @@ public class Message implements Serializable{
 	private final Message message;
 	private final int sender;
 	
+	private List<Block> blockchain;
+	private List<Block> notarizechain;
+	private int epochNumber;
+	
+	
 	public Message(MessageType type, int sender, Message message, Block block) {
 		this.type = type;
 		this.sender = sender;
 		this.message = message;
 		this.block = block;
+	}
+	
+	public Message(MessageType type, int sender) {
+		this.block = null;
+		this.message = null;
+
+		this.type = MessageType.RECOVERY;
+		this.sender = sender;
+	}
+	
+	public Message(int sender, List<Block> blockchain, List<Block> notarizechain, int epochNumber) {
+		this.block = null;
+		this.message = null;
+
+		this.type = MessageType.RECOVERY;
+		this.sender = sender;
+		this.blockchain = blockchain;
+		this.notarizechain = notarizechain;
+		this.epochNumber = epochNumber;
+		
 	}
 	
 	public MessageType getMessageType() {
@@ -33,6 +59,18 @@ public class Message implements Serializable{
 	
 	public int getSender() {
 		return sender;
+	}
+	
+	public List<Block> getBlockchain() {
+		return blockchain;
+	}
+
+	public List<Block> getNotarizechain() {
+		return notarizechain;
+	}
+
+	public int getEpochNumber() {
+		return epochNumber;
 	}
 
 	@Override

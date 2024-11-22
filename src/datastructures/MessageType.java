@@ -4,5 +4,6 @@ public enum MessageType {
 	PROPOSE,
 	VOTE,
 	ECHO,
-	RECOVERY
+	RECOVERY,
+	RECOVERY_ANSWER
 }
