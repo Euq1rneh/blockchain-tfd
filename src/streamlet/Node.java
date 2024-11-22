@@ -190,7 +190,6 @@ public class Node {
 
 	private static void startEpoch() throws IOException {
 		epochScheduler();
-		// finalizationScheduler();
 	}
 
 	public static int electLider() {
@@ -212,7 +211,6 @@ public class Node {
 
 		if (currentLider != nodeId) {
 			ProcessLogger.log("Is not current epoch Lider\n\"Waiting for proposed block\"", LoggerSeverity.INFO);
-
 		} else {
 			int parentChainSize = notarizedChain.size();
 
@@ -223,7 +221,7 @@ public class Node {
 			Transaction[] transactions = new Transaction[1];
 			transactions[0] = new Transaction(nodeId, receiverId, tAmount);
 
-			Block newBlock = new Block(currentEpoch, parentChainSize + 1, transactions, null,
+			Block newBlock = new Block(currentEpoch, parentChainSize + 1, transactions, notarizedChain,
 					notarizedChain.get(parentChainSize - 1));
 
 			// multicast of newBlock
@@ -237,20 +235,10 @@ public class Node {
 
 			}
 		}
-
-//		ProcessLogger.log("Received message from " + m.getSender() + " of type " + m.getMessageType().toString()
-//				+ "\n\n" + "######################\n######################\n" + "NOT-CHAIN-LEN=" + notarizedChain.size()
-//				+ "\nBLOCK-NOT-CHAIN-LEN=" + m.getBlock().getLength()
-//				+ "\n######################\n######################\n", LoggerSeverity.INFO);
-
-//		ProcessLogger.log("--------------------- PROPOSE PHASE END ---------------------", LoggerSeverity.INFO);
 	}
 	
 	public static void vote() throws IOException {
-		
-//		ProcessLogger.log("--------------------- VOTE PHASE ---------------------", LoggerSeverity.INFO);
-		// receive proposed block from leader
-		
+				
 		if(currentEpochMessage == null) {
 			ProcessLogger.log("Message was null", LoggerSeverity.INFO);
 			return;
@@ -283,24 +271,21 @@ public class Node {
 	
 	public synchronized static void receivedVoteHandler() {
 
-		// Se o bloco já foi notariado, não faz sentido continuar
 	    if (currentBlockToVote == null || currentBlockToVote.isNotarized()) {
 	        return;
 	    }
 	    
-	    // Verifique se já obteve votos suficientes
 	    if (votesReceived.size() <= (int) (nodeStreams.size() / 2)) {
 	        return; // Não tem votos suficientes, sai
 	    }
 	    
-	    // Se os votos necessários foram recebidos, notarize o bloco
 	    ProcessLogger.log("Necessary votes received. Notarizing block...", LoggerSeverity.INFO);
 
-	    currentBlockToVote.notarize(); // Notariza o bloco
-	    //notarizedChain = new ArrayList<Block>(currentBlockToVote.getParentChain()); // Atualiza a cadeia de blocos
+	    currentBlockToVote.notarize();
+	    notarizedChain = new ArrayList<Block>(currentBlockToVote.getParentChain());
 	    notarizedChain.add(currentBlockToVote);
 	    
-	    ProcessLogger.log("NotarizedChain with lenght: " + notarizedChain.size(), LoggerSeverity.INFO);
+//	    ProcessLogger.log("NotarizedChain with lenght: " + notarizedChain.size(), LoggerSeverity.INFO);
 	    
 	    finalizeChain();
 	    

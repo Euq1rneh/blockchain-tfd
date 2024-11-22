@@ -18,7 +18,7 @@ public class Block implements Serializable{
 	private final int epoch;
 	private final int length;
 	private final Transaction[] transactions;
-	private final List<Block> parentChain; // to avoid sending another message
+	private List<Block> parentChain; // to avoid sending another message
 	private boolean notarized;
 	
 	public Block(int epoch, int length, Transaction[] transactions, List<Block> parentChain, Block prevBlock) {
@@ -71,7 +71,9 @@ public class Block implements Serializable{
 	}
 
 	public List<Block> getParentChain(){
-		return parentChain;
+		List<Block> p = parentChain;
+		parentChain = null;
+		return p;
 	}
 	
 	public byte[] getBytes() {

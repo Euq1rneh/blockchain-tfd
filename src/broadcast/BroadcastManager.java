@@ -36,7 +36,7 @@ public class BroadcastManager {
 
 			if (m.getBlock().getEpoch() == Node.currentEpoch && m.getSender() == Node.currentLider) {
 				Node.currentEpochMessage = m;
-				ProcessLogger.log("PROPOSE message from " + m.getSender() + " received!!!", LoggerSeverity.INFO);
+				//ProcessLogger.log("PROPOSE message from " + m.getSender() + " received!!!", LoggerSeverity.INFO);
 				echoMessage(echoNodes, m);
 				Node.vote();
 			}
@@ -46,7 +46,7 @@ public class BroadcastManager {
 			if (Node.votesReceived.contains(m) || !m.getBlock().equals(Node.currentBlockToVote)) {
 				return;
 			}
-			ProcessLogger.log("VOTE message from " + m.getSender() + " received!!!", LoggerSeverity.INFO);
+//			ProcessLogger.log("VOTE message from " + m.getSender() + " received!!!", LoggerSeverity.INFO);
 			Node.votesReceived.add(m);
 			echoMessage(echoNodes, m);
 			Node.receivedVoteHandler();
@@ -80,6 +80,7 @@ public class BroadcastManager {
 			stream.flush();
 			stream.reset();
 		} catch (IOException e) {
+			//Node crashed
 			System.out.println("Could not send message to a node");
 		}
 	}
