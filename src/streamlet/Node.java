@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.text.SimpleDateFormat;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -42,7 +44,7 @@ public class Node {
 	private static volatile List<Block> notarizedChain = new ArrayList<Block>(); // only contains notarized blocks
 	public static volatile Queue<Message> votesReceived = new ConcurrentLinkedQueue<Message>();
 
-	//public static volatile boolean canDeliver = false;
+	// public static volatile boolean canDeliver = false;
 	public static volatile boolean close = false;
 
 	private static String startTime; // Configured start time for connections
@@ -56,6 +58,15 @@ public class Node {
 	private static BroadcastManager bm;
 
 	private static Random rd;
+
+	private static boolean shouldEnterRecoveryMode() {
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+		LocalTime time = LocalTime.parse(startTime, formatter); // time in config
+		String formattedTime = LocalTime.now().format(formatter); // current time
+		LocalTime now = LocalTime.parse(formattedTime, formatter);
+
+		return time.isBefore(now);
+	}
 
 	private static void waitForStartTime() {
 		try {
@@ -236,14 +247,14 @@ public class Node {
 			}
 		}
 	}
-	
+
 	public static void vote() throws IOException {
-				
-		if(currentEpochMessage == null) {
+
+		if (currentEpochMessage == null) {
 			ProcessLogger.log("Message was null", LoggerSeverity.INFO);
 			return;
 		}
-		
+
 		currentBlockToVote = currentEpochMessage.getBlock();
 
 		if (currentBlockToVote == null) {
@@ -268,27 +279,27 @@ public class Node {
 		ProcessLogger.log("Waiting to receive necessary votes", LoggerSeverity.INFO);
 
 	}
-	
+
 	public synchronized static void receivedVoteHandler() {
 
-	    if (currentBlockToVote == null || currentBlockToVote.isNotarized()) {
-	        return;
-	    }
-	    
-	    if (votesReceived.size() <= (int) (nodeStreams.size() / 2)) {
-	        return; // Não tem votos suficientes, sai
-	    }
-	    
-	    ProcessLogger.log("Necessary votes received. Notarizing block...", LoggerSeverity.INFO);
+		if (currentBlockToVote == null || currentBlockToVote.isNotarized()) {
+			return;
+		}
 
-	    currentBlockToVote.notarize();
-	    notarizedChain = new ArrayList<Block>(currentBlockToVote.getParentChain());
-	    notarizedChain.add(currentBlockToVote);
-	    
+		if (votesReceived.size() <= (int) (nodeStreams.size() / 2)) {
+			return; // Não tem votos suficientes, sai
+		}
+
+		ProcessLogger.log("Necessary votes received. Notarizing block...", LoggerSeverity.INFO);
+
+		currentBlockToVote.notarize();
+		notarizedChain = new ArrayList<Block>(currentBlockToVote.getParentChain());
+		notarizedChain.add(currentBlockToVote);
+
 //	    ProcessLogger.log("NotarizedChain with lenght: " + notarizedChain.size(), LoggerSeverity.INFO);
-	    
-	    finalizeChain();
-	    
+
+		finalizeChain();
+
 	}
 
 	private synchronized static void finalizeChain() {
@@ -306,10 +317,10 @@ public class Node {
 
 		if (final1.getEpoch() == (final2.getEpoch() + 1) && final2.getEpoch() == (final3.getEpoch() + 1)) {
 			if ((notarizedChain.size() - 1) > blockChain.size()) {
-				blockChain = new ArrayList<Block>(); //leave the cleaning to the garbage collector
+				blockChain = new ArrayList<Block>(); // leave the cleaning to the garbage collector
 				blockChain.addAll(notarizedChain);
 				blockChain.remove(notarizedChain.size() - 1);
-				
+
 				StringBuilder sb = new StringBuilder();
 				sb.append("⊥");
 				for (int i = 1; i < blockChain.size(); i++) {
@@ -325,7 +336,8 @@ public class Node {
 				sb.append(" -> epoch " + notarizedChain.get(i).getEpoch());
 			}
 
-			ProcessLogger.log("FINALIZED: Nothing new to notarize\nCurrent notarized chain:\n" +  sb.toString(), LoggerSeverity.INFO);
+			ProcessLogger.log("FINALIZED: Nothing new to notarize\nCurrent notarized chain:\n" + sb.toString(),
+					LoggerSeverity.INFO);
 			return;
 		}
 		StringBuilder sb = new StringBuilder();
@@ -334,7 +346,10 @@ public class Node {
 			sb.append(" -> epoch " + notarizedChain.get(i).getEpoch());
 		}
 
-		ProcessLogger.log("FINALIZE: Last three blocks where not from consecutive epochs. Chain was not finalized\nCurrent notarized chain:\n" +  sb.toString(), LoggerSeverity.INFO);
+		ProcessLogger.log(
+				"FINALIZE: Last three blocks where not from consecutive epochs. Chain was not finalized\nCurrent notarized chain:\n"
+						+ sb.toString(),
+				LoggerSeverity.INFO);
 	}
 
 	private static void epochScheduler() {
@@ -349,15 +364,13 @@ public class Node {
 				currentBlockToVote = null;
 				votesReceived.clear();
 
-				
 				ProcessLogger.log("\n###########################################\n" + " STARTING EPOCH " + currentEpoch
 						+ "\n###########################################", LoggerSeverity.INFO);
-				
 
 				electLider();
 				propose();
 			}
-		}, 0, (roudDurationSec * 2 + 1 )* 1000); // Epoch duration: 2 * roundDurationSec (one for each round)
+		}, 0, (roudDurationSec * 2 + 1) * 1000); // Epoch duration: 2 * roundDurationSec (one for each round)
 
 		// Optional: Add shutdown hook to stop the timer when the program exits
 		Runtime.getRuntime().addShutdownHook(new Thread(timer::cancel));
@@ -396,16 +409,19 @@ public class Node {
 		serverThread.start();
 
 		System.out.printf("Node ID: %d\n", nodeId);
-		waitForStartTime();
 
-		// Start the client thread to connect to the target node
-		connectToNode();
+		if (shouldEnterRecoveryMode()) {
 
-		try {
-			startEpoch();
-		} catch (IOException e) {
-			e.printStackTrace();
+		} else {
+			waitForStartTime();
+			connectToNode();
+			try {
+				startEpoch();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 		}
+
 	}
 
 }

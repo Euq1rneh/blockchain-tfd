@@ -10,6 +10,7 @@ import java.util.Queue;
 
 import broadcast.BroadcastManager;
 import datastructures.Message;
+import datastructures.MessageType;
 
 class ClientHandler implements Runnable {
     private Socket clientSocket;
@@ -30,6 +31,11 @@ class ClientHandler implements Runnable {
         try (ObjectInputStream in = new ObjectInputStream(clientSocket.getInputStream())) {
             while (true) {
                 Message m = (Message) in.readObject();
+                
+                if(m.getMessageType().equals(MessageType.RECOVERY)) {
+                	
+                }
+                
                 synchronized (messageQueue) {
                     messageQueue.offer(m); // Adicionando mensagens à fila
                 }
