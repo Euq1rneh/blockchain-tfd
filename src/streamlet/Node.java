@@ -287,18 +287,12 @@ public class Node {
 	    if (currentBlockToVote == null || currentBlockToVote.isNotarized()) {
 	        return;
 	    }
-
-	    if (notarizedChain.contains(currentBlockToVote)) {
-	        // O bloco já foi notariado, então não faça nada
-	        return;
-	    }
 	    
 	    // Verifique se já obteve votos suficientes
 	    if (votesReceived.size() <= (int) (nodeStreams.size() / 2)) {
 	        return; // Não tem votos suficientes, sai
 	    }
 	    
-
 	    // Se os votos necessários foram recebidos, notarize o bloco
 	    ProcessLogger.log("Necessary votes received. Notarizing block...", LoggerSeverity.INFO);
 

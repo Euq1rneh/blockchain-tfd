@@ -13,71 +13,74 @@ import streamlet.Node;
 
 public class BroadcastManager {
 
-    private int broadcasterId;
+	private int broadcasterId;
 
-    public BroadcastManager(int broadcasterId) {
-        this.broadcasterId = broadcasterId;
-    }
+	public BroadcastManager(int broadcasterId) {
+		this.broadcasterId = broadcasterId;
+	}
 
-    public void receive(HashMap<Integer, ObjectOutputStream> echoNodes, Message m) throws IOException {
+	public void receive(HashMap<Integer, ObjectOutputStream> echoNodes, Message m) throws IOException {
 
-        // Processar mensagens do tipo ECHO
-        if (m.getMessageType().equals(MessageType.ECHO)) {
-            //ProcessLogger.log("Message type is ECHO from " + m.getSender() + ". Retrieving inner message...", LoggerSeverity.INFO);
-            m = m.getMessage();
-        }
+		// Processar mensagens do tipo ECHO
+		if (m.getMessageType().equals(MessageType.ECHO)) {
+			// ProcessLogger.log("Message type is ECHO from " + m.getSender() + ".
+			// Retrieving inner message...", LoggerSeverity.INFO);
+			m = m.getMessage();
+		}
 
-        // Processar mensagens do tipo PROPOSE
-        if (m.getMessageType().equals(MessageType.PROPOSE)) {
-            if (Node.currentEpochMessage != null) {
-                return; // Se já temos uma mensagem para a época atual, ignore
-            }
+		// Processar mensagens do tipo PROPOSE
+		if (m.getMessageType().equals(MessageType.PROPOSE)) {
+			if (Node.currentEpochMessage != null) {
+				return; // Se já temos uma mensagem para a época atual, ignore
+			}
 
-            if (m.getBlock().getEpoch() == Node.currentEpoch && m.getSender() == Node.currentLider) {
-                Node.currentEpochMessage = m;
-                ProcessLogger.log("PROPOSE message from " + m.getSender() + " received!!!", LoggerSeverity.INFO);
-                Node.vote();
-            }
-        }
-        
-        if (m.getMessageType().equals(MessageType.VOTE)) {
-        	if (Node.votesReceived.contains(m)  || !m.getBlock().equals(Node.currentBlockToVote)) {
+			if (m.getBlock().getEpoch() == Node.currentEpoch && m.getSender() == Node.currentLider) {
+				Node.currentEpochMessage = m;
+				ProcessLogger.log("PROPOSE message from " + m.getSender() + " received!!!", LoggerSeverity.INFO);
+				echoMessage(echoNodes, m);
+				Node.vote();
+			}
+		}
+
+		if (m.getMessageType().equals(MessageType.VOTE)) {
+			if (Node.votesReceived.contains(m) || !m.getBlock().equals(Node.currentBlockToVote)) {
 				return;
 			}
-        	ProcessLogger.log("VOTE message from " + m.getSender() + " received!!!", LoggerSeverity.INFO);
+			ProcessLogger.log("VOTE message from " + m.getSender() + " received!!!", LoggerSeverity.INFO);
 			Node.votesReceived.add(m);
-		    if (Node.currentBlockToVote != null && !Node.currentBlockToVote.isNotarized()) {
-		        Node.receivedVoteHandler();
-		    }
-        }
+			echoMessage(echoNodes, m);
+			Node.receivedVoteHandler();
+		}
+	}
 
-        // Criação de ECHO para retransmissão
-        Message echoMsg = new Message(MessageType.ECHO, broadcasterId, m, null);
+	private void echoMessage(HashMap<Integer, ObjectOutputStream> echoNodes, Message m) {
+		// Criação de ECHO para retransmissão
+		Message echoMsg = new Message(MessageType.ECHO, broadcasterId, m, null);
 
-        for (Map.Entry<Integer, ObjectOutputStream> entry : echoNodes.entrySet()) {
-            Integer id = entry.getKey();
-            ObjectOutputStream stream = entry.getValue();
+		for (Map.Entry<Integer, ObjectOutputStream> entry : echoNodes.entrySet()) {
+			Integer id = entry.getKey();
+			ObjectOutputStream stream = entry.getValue();
 
-            if (id == broadcasterId || id == m.getSender()) {
-                continue; // Não enviar para o próprio nó ou para o remetente
-            }
+			if (id == broadcasterId || id == m.getSender()) {
+				continue; // Não enviar para o próprio nó ou para o remetente
+			}
 
-            send(echoMsg, stream); // Enviar ECHO para outros nós
-        }
-    }
+			send(echoMsg, stream); // Enviar ECHO para outros nós
+		}
+	}
 
-    public synchronized void send(Message m, ObjectOutputStream stream) {
-        if (m == null) {
-            System.out.println("Did not send message because m was null");
-            return;
-        }
+	public synchronized void send(Message m, ObjectOutputStream stream) {
+		if (m == null) {
+			System.out.println("Did not send message because m was null");
+			return;
+		}
 
-        try {
-            stream.writeObject(m);
-            stream.flush();
-            stream.reset();
-        } catch (IOException e) {
-            System.out.println("Could not send message to a node");
-        }
-    }
+		try {
+			stream.writeObject(m);
+			stream.flush();
+			stream.reset();
+		} catch (IOException e) {
+			System.out.println("Could not send message to a node");
+		}
+	}
 }
