@@ -2,52 +2,59 @@ package broadcast;
 
 import java.io.IOException;
 import java.io.ObjectOutputStream;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
+import Logger.LoggerSeverity;
+import Logger.ProcessLogger;
 import datastructures.Message;
 import datastructures.MessageType;
 import streamlet.Node;
 
 public class BroadcastManager {
 
-	//Podemos usar uma message queue para processar as mensagens numa unica thread
-	
-	private Message lastMessage = null;
-	private List<Message> lastMessages = new ArrayList<Message>();
-	private int broadcasterId; // own ID
-	
+	private int broadcasterId;
+
 	public BroadcastManager(int broadcasterId) {
 		this.broadcasterId = broadcasterId;
 	}
 
-	public synchronized void receive(HashMap<Integer, ObjectOutputStream> echoNodes, Message m) throws IOException {
-		
-//		ProcessLogger.log("-------------- BroadcastManager.receive() --------------", LoggerSeverity.INFO);
-//		ProcessLogger.log("Analysing received message...", LoggerSeverity.INFO);
-		
-		// retrieve inner message (perguntar prof)
+	public void receive(HashMap<Integer, ObjectOutputStream> echoNodes, Message m) throws IOException {
+
+		// Processar mensagens do tipo ECHO
 		if (m.getMessageType().equals(MessageType.ECHO)) {
-//			ProcessLogger.log("Message type is ECHO. Retrieving inner message...", LoggerSeverity.INFO);
-			m = m.getMessage();			
+			// ProcessLogger.log("Message type is ECHO from " + m.getSender() + ".
+			// Retrieving inner message...", LoggerSeverity.INFO);
+			m = m.getMessage();
+		}
+
+		// Processar mensagens do tipo PROPOSE
+		if (m.getMessageType().equals(MessageType.PROPOSE)) {
+			if (Node.currentEpochMessage != null) {
+				return; // Se já temos uma mensagem para a época atual, ignore
+			}
+
+			if (m.getBlock().getEpoch() == Node.currentEpoch && m.getSender() == Node.currentLider) {
+				Node.currentEpochMessage = m;
+				ProcessLogger.log("PROPOSE message from " + m.getSender() + " received!!!", LoggerSeverity.INFO);
+				echoMessage(echoNodes, m);
+				Node.vote();
+			}
 		}
 
 		if (m.getMessageType().equals(MessageType.VOTE)) {
-//			ProcessLogger.log("Message type is VOTE. Adding to votes...", LoggerSeverity.INFO);
-			if (Node.votesReceived.contains(m)) {
+			if (Node.votesReceived.contains(m) || !m.getBlock().equals(Node.currentBlockToVote)) {
 				return;
 			}
+			ProcessLogger.log("VOTE message from " + m.getSender() + " received!!!", LoggerSeverity.INFO);
 			Node.votesReceived.add(m);
+			echoMessage(echoNodes, m);
+			Node.receivedVoteHandler();
 		}
-		
-		if (lastMessage != null && lastMessage.equals(m)) {
-//			ProcessLogger.log("Received message is equal to last message skipping echo process", LoggerSeverity.INFO);
-			return;
-		}
+	}
 
-//		ProcessLogger.log("Received message is new starting echo process...", LoggerSeverity.INFO);
+	private void echoMessage(HashMap<Integer, ObjectOutputStream> echoNodes, Message m) {
+		// Criação de ECHO para retransmissão
 		Message echoMsg = new Message(MessageType.ECHO, broadcasterId, m, null);
 
 		for (Map.Entry<Integer, ObjectOutputStream> entry : echoNodes.entrySet()) {
@@ -55,26 +62,19 @@ public class BroadcastManager {
 			ObjectOutputStream stream = entry.getValue();
 
 			if (id == broadcasterId || id == m.getSender()) {
-//				ProcessLogger.log("Skipping current node with ID " + id +"(same ID as message sender/is this node)", LoggerSeverity.INFO);
-				continue;
+				continue; // Não enviar para o próprio nó ou para o remetente
 			}
-//			ProcessLogger.log("Echoing message to node with ID "+ entry.getKey(), LoggerSeverity.INFO);
-			send(echoMsg, stream);
-		}
 
-		if(m.getMessageType().equals(MessageType.PROPOSE)) {
-			lastMessage = m;	
+			send(echoMsg, stream); // Enviar ECHO para outros nós
 		}
-		
-//		ProcessLogger.log("-------------- BroadcastManager.receive() END --------------", LoggerSeverity.INFO);
 	}
 
-	public synchronized void send(Message m, ObjectOutputStream stream){
+	public synchronized void send(Message m, ObjectOutputStream stream) {
 		if (m == null) {
 			System.out.println("Did not send message because m was null");
 			return;
 		}
-		
+
 		try {
 			stream.writeObject(m);
 			stream.flush();
@@ -82,11 +82,5 @@ public class BroadcastManager {
 		} catch (IOException e) {
 			System.out.println("Could not send message to a node");
 		}
-	}
-
-	public Message deliver() {
-		Message deliver = lastMessage;
-		lastMessage = null;
-		return deliver;
 	}
 }

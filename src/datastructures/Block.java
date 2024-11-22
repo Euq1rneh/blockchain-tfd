@@ -63,11 +63,11 @@ public class Block implements Serializable{
 	}
 	
 	public boolean isNotarized() {
-		return notarized;
+		return this.notarized;
 	}
 	
 	public void notarize() {
-		notarized = true;
+		this.notarized = true;
 	}
 
 	public List<Block> getParentChain(){
