@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.text.SimpleDateFormat;
+import java.time.Duration;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -51,7 +52,7 @@ public class Node {
 	private static int seed;
 	private static int roudDurationSec;
 	private static int recoveryRounds;
-	
+
 	public static boolean recoveryRequest;
 	public static int roundsToRecover;
 	public static int currentEpoch;
@@ -152,7 +153,7 @@ public class Node {
 				case "start_time":
 					startTime = args[1];
 					break;
-					
+
 				case "recovery_rounds":
 					recoveryRounds = Integer.parseInt(args[1]);
 					break;
@@ -357,15 +358,15 @@ public class Node {
 						+ sb.toString(),
 				LoggerSeverity.INFO);
 	}
-	
+
 	public static void answerRecovery(int sender) {
-		
+
 		Message m = new Message(nodeId, blockChain, notarizedChain, currentEpoch);
-		
+
 		String nodeAddress = allNodes.get(sender);
 
 		String[] args = nodeAddress.split(":");
-		
+
 		try {
 			Socket s = new Socket(args[0], Integer.parseInt(args[1]));
 			ObjectOutputStream stream = new ObjectOutputStream(s.getOutputStream());
@@ -379,42 +380,48 @@ public class Node {
 		} catch (IOException e) {
 			System.out.printf("Could not connect to node with address %s\n", nodeAddress);
 		}
-		
+
 		bm.send(m, nodeStreams.get(sender));
-				
+
 	}
 
 	private static void sendRecovery() {
 
 		Message m = new Message(MessageType.RECOVERY, nodeId);
-		
+
 		for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
 //			ProcessLogger.log("Sending message to node with ID " + entry.getKey(), LoggerSeverity.INFO);
 			ObjectOutputStream stream = entry.getValue();
 
 			bm.send(m, stream);
-
 		}
-		
 	}
-	
+
 	public synchronized static void receiveRecovery(Message m) {
-		
+
 		blockChain = m.getBlockchain();
 		notarizedChain = m.getNotarizechain();
 		currentEpoch = m.getEpochNumber();
 		recoveryRequest = true;
-		
+
 		// calcular o tempo de inicio de scheduler (Incio + numeroR * TempoE)
+
+		long epochDuration = (2 * roudDurationSec) + 1;
+		LocalTime initialStartTime = LocalTime.parse(startTime);
+		//ja tem em conta o incremento das rondas de recuperação?????
+		Duration totalIncrement = Duration.ofSeconds(epochDuration * currentEpoch);
+
+		LocalTime newStartTime = initialStartTime.plus(totalIncrement);
+		startTime = newStartTime.toString();
 		
+		waitForStartTime();
 		try {
 			startEpoch();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		
 	}
-	
+
 	private static void epochScheduler() {
 		Timer timer = new Timer();
 
@@ -482,7 +489,7 @@ public class Node {
 
 		if (shouldEnterRecoveryMode()) {
 			connectToNode();
-			//send recovery message
+			// send recovery message
 			sendRecovery();
 
 		} else {
