@@ -17,11 +17,9 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Random;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 
 import Logger.LoggerSeverity;
@@ -42,9 +40,10 @@ public class Node {
 	private static volatile HashMap<Integer, Socket> nodeSockets = new HashMap<Integer, Socket>();
 	private static volatile HashMap<Integer, ObjectOutputStream> nodeStreams = new HashMap<Integer, ObjectOutputStream>();
 	private static volatile List<Block> blockChain = new ArrayList<Block>(); // only contains finalized blocks
-	private static volatile List<Block> notarizedChain = new ArrayList<Block>(); // only contains notarized blocks
-	public static volatile Queue<Message> votesReceived = new ConcurrentLinkedQueue<Message>();
+	public static volatile List<Block> notarizedChain = new ArrayList<Block>(); // only contains notarized blocks
 
+	public static HashMap<Block, List<Integer>> votesForBlock = new HashMap<Block, List<Integer>>();
+	
 	// public static volatile boolean canDeliver = false;
 	public static volatile boolean close = false;
 
@@ -65,10 +64,8 @@ public class Node {
 	// Protocol variables
 	public static int currentEpoch;
 	public static int currentLider;
-	public static Message currentEpochMessage;
-	public static Block currentBlockToVote;
+	
 	private static BroadcastManager bm;
-
 	private static Random rd;
 
 	private static boolean shouldEnterRecoveryMode() {
@@ -233,7 +230,7 @@ public class Node {
 	public static int electLider() {
 		ProcessLogger.log("Electing new Lider (available nodes " + nodeStreams.size() + ")...", LoggerSeverity.INFO);
 
-		if (currentEpoch < confusionStart || currentEpoch >= (confusionStart + confusionDuration)) {
+		if (currentEpoch < confusionStart || currentEpoch >= (confusionStart + confusionDuration - 1)) {
 			int index = rd.nextInt(100) % nodeStreams.size();
 
 			int[] keyArray = nodeStreams.keySet().stream().mapToInt(Integer::intValue).toArray();
@@ -280,27 +277,27 @@ public class Node {
 		}
 	}
 
-	public static void vote() throws IOException {
+	public static void vote(Message m) throws IOException {
 
-		if (currentEpochMessage == null) {
+		if (m == null) {
 			ProcessLogger.log("Message was null", LoggerSeverity.INFO);
 			return;
 		}
-
-		currentBlockToVote = currentEpochMessage.getBlock();
-
-		if (currentBlockToVote == null) {
+		
+		Block messageBlock;
+		
+		if ((messageBlock =m.getBlock()) == null) {
 			System.out.println("Could not vote. Block in message was null");
 			return;
 		}
 
-		if (currentBlockToVote.getLength() <= notarizedChain.size()) {
+		if (messageBlock.getLength() <= notarizedChain.size()) {
 			ProcessLogger.log("Chain size of proposed block is smaller. Rejecting block...", LoggerSeverity.INFO);
 			// no vote
 			return;
 		}
 
-		Message vote = new Message(MessageType.VOTE, nodeId, null, currentBlockToVote);
+		Message vote = new Message(MessageType.VOTE, nodeId, null, messageBlock);
 
 		for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
 //			ProcessLogger.log("Sending Vote message to node with ID " + entry.getKey(), LoggerSeverity.INFO);
@@ -312,13 +309,13 @@ public class Node {
 
 	}
 
-	public synchronized static void receivedVoteHandler() {
+	public synchronized static void receivedVoteHandler(Block currentBlockToVote) {
 
-		if (currentBlockToVote == null || currentBlockToVote.isNotarized()) {
+		if (currentBlockToVote.isNotarized()) {
 			return;
 		}
 
-		if (votesReceived.size() <= (int) (nodeStreams.size() / 2)) {
+		if(votesForBlock.get(currentBlockToVote).size() <= (int) (nodeStreams.size() / 2)) {
 			return; // Não tem votos suficientes, sai
 		}
 
@@ -328,15 +325,30 @@ public class Node {
 		notarizedChain = new ArrayList<Block>(currentBlockToVote.getParentChain());
 		notarizedChain.add(currentBlockToVote);
 
+		votesForBlock.remove(currentBlockToVote);//no longer need to collect votes for block
+		
 //	    ProcessLogger.log("NotarizedChain with lenght: " + notarizedChain.size(), LoggerSeverity.INFO);
 
+		for (Map.Entry<Block, List<Integer>> entry : votesForBlock.entrySet()) {
+			Block b = entry.getKey();
+			List<Integer> val = entry.getValue();
+			ProcessLogger.log("Votes for block from epoch " + b.getEpoch() + "= "+ val.size(), LoggerSeverity.INFO);
+		}
+		
+		StringBuilder sb = new StringBuilder();
+		sb.append("⊥");
+		for (int i = 1; i < notarizedChain.size(); i++) {
+			sb.append(" -> epoch " + notarizedChain.get(i).getEpoch());
+		}
+
+		ProcessLogger.log("Not. CHAIN= " + sb.toString(), LoggerSeverity.INFO);
 		finalizeChain();
 
 	}
 
 	private synchronized static void finalizeChain() {
 		if (notarizedChain.size() - 1 < 3) {
-			ProcessLogger.log("FINALIZE: Could not finalize chain. Not enough blocks", LoggerSeverity.INFO);
+//			ProcessLogger.log("FINALIZE: Could not finalize chain. Not enough blocks", LoggerSeverity.INFO);
 			return;
 		}
 
@@ -352,7 +364,7 @@ public class Node {
 				blockChain = new ArrayList<Block>(); // leave the cleaning to the garbage collector
 				blockChain.addAll(notarizedChain);
 				blockChain.remove(notarizedChain.size() - 1);
-
+				
 				StringBuilder sb = new StringBuilder();
 				sb.append("⊥");
 				for (int i = 1; i < blockChain.size(); i++) {
@@ -362,14 +374,14 @@ public class Node {
 				return;
 			}
 
-			StringBuilder sb = new StringBuilder();
-			sb.append("⊥");
-			for (int i = 1; i < notarizedChain.size(); i++) {
-				sb.append(" -> epoch " + notarizedChain.get(i).getEpoch());
-			}
-
-			ProcessLogger.log("FINALIZED: Nothing new to notarize\nCurrent notarized chain:\n" + sb.toString(),
-					LoggerSeverity.INFO);
+//			StringBuilder sb = new StringBuilder();
+//			sb.append("⊥");
+//			for (int i = 1; i < notarizedChain.size(); i++) {
+//				sb.append(" -> epoch " + notarizedChain.get(i).getEpoch());
+//			}
+//
+//			ProcessLogger.log("FINALIZED: Nothing new to notarize\nCurrent notarized chain:\n" + sb.toString(),
+//					LoggerSeverity.INFO);
 			return;
 		}
 		StringBuilder sb = new StringBuilder();
@@ -477,9 +489,6 @@ public class Node {
 				}
 
 				currentEpoch++;
-				currentEpochMessage = null;
-				currentBlockToVote = null;
-				votesReceived.clear();
 
 				ProcessLogger.log("\n###########################################\n" + " STARTING EPOCH " + currentEpoch
 						+ "\n###########################################", LoggerSeverity.INFO);

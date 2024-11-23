@@ -66,13 +66,12 @@ class ClientHandler implements Runnable {
 
 	// Método para processar mensagens
 	public void processMessages() {
-		while (!messageQueue.isEmpty()) {
-			
-			if (Node.currentEpoch < Node.confusionStart || Node.currentEpoch >= (Node.confusionStart + Node.confusionDuration)) {
+		if (!messageQueue.isEmpty()) {
+			if (Node.currentEpoch < Node.confusionStart || Node.currentEpoch >= (Node.confusionStart + Node.confusionDuration - 1)) {
 				Message m;
 				synchronized (messageQueue) {
 					m = messageQueue.poll(); // Remover a mensagem da fila
-				}
+				}				
 				
 				try {
 					bm.receive(connectedNodes, m); // Processar a mensagem

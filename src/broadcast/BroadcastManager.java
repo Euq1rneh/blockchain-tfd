@@ -2,11 +2,14 @@ package broadcast;
 
 import java.io.IOException;
 import java.io.ObjectOutputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import Logger.LoggerSeverity;
 import Logger.ProcessLogger;
+import datastructures.Block;
 import datastructures.Message;
 import datastructures.MessageType;
 import streamlet.Node;
@@ -23,33 +26,52 @@ public class BroadcastManager {
 
 		// Processar mensagens do tipo ECHO
 		if (m.getMessageType().equals(MessageType.ECHO)) {
-			// ProcessLogger.log("Message type is ECHO from " + m.getSender() + ".
-			// Retrieving inner message...", LoggerSeverity.INFO);
 			m = m.getMessage();
 		}
 
 		// Processar mensagens do tipo PROPOSE
 		if (m.getMessageType().equals(MessageType.PROPOSE)) {
-			if (Node.currentEpochMessage != null) {
-				return; // Se já temos uma mensagem para a época atual, ignore
+			Block messageBlock;
+
+			if ((messageBlock = m.getBlock()) == null) {
+				ProcessLogger.log("Block in propose message was null", LoggerSeverity.INFO);
+				return;
 			}
 
-			if (m.getBlock().getEpoch() == Node.currentEpoch && m.getSender() == Node.currentLider) {
-				Node.currentEpochMessage = m;
-				//ProcessLogger.log("PROPOSE message from " + m.getSender() + " received!!!", LoggerSeverity.INFO);
+			if(Node.notarizedChain.contains(messageBlock)) {
+				//ignore propose (likely an echo) block is already notarized
+				return;
+			}
+			
+			if (!Node.votesForBlock.containsKey(messageBlock)) {
+				Node.votesForBlock.put(messageBlock, new ArrayList<Integer>());
 				echoMessage(echoNodes, m);
-				Node.vote();
+				Node.vote(m);
 			}
 		}
 
 		if (m.getMessageType().equals(MessageType.VOTE)) {
-			if (Node.votesReceived.contains(m) || !m.getBlock().equals(Node.currentBlockToVote)) {
+
+			Block messageBlock;
+
+			if ((messageBlock = m.getBlock()) == null) {
+				ProcessLogger.log("Block in propose message was null", LoggerSeverity.INFO);
 				return;
 			}
-//			ProcessLogger.log("VOTE message from " + m.getSender() + " received!!!", LoggerSeverity.INFO);
-			Node.votesReceived.add(m);
-			echoMessage(echoNodes, m);
-			Node.receivedVoteHandler();
+			
+			if(Node.notarizedChain.contains(messageBlock)) {
+				//ignore propose (likely an echo) block is already notarized
+				return;
+			}
+
+			if (Node.votesForBlock.containsKey(messageBlock)) {
+				if (Node.votesForBlock.get(messageBlock).contains(m.getSender())) {
+					return;
+				}
+				Node.votesForBlock.get(messageBlock).add(m.getSender());
+				echoMessage(echoNodes, m);
+				Node.receivedVoteHandler(messageBlock);
+			}
 		}
 	}
 
@@ -80,7 +102,7 @@ public class BroadcastManager {
 			stream.flush();
 			stream.reset();
 		} catch (IOException e) {
-			//Node crashed
+			// Node crashed
 			System.out.println("Could not send message to a node");
 		}
 	}
