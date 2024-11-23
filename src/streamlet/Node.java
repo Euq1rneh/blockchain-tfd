@@ -48,19 +48,21 @@ public class Node {
 	// public static volatile boolean canDeliver = false;
 	public static volatile boolean close = false;
 
-	//Config variables
+	// Config variables
 	private static String startTime; // Configured start time for connections
 	private static int seed;
 	private static int roudDurationSec;
 	private static int recoveryRounds;
+	public static int confusionStart;
+	public static int confusionDuration;
 
-	//Recovery variables
+	// Recovery variables
 	public static boolean recoveryRequest;
 	public static int roundsToRecover;
 	public static boolean hasRecovered;
 	public static boolean canProcessMessages = true;
-	
-	//Protocol variables
+
+	// Protocol variables
 	public static int currentEpoch;
 	public static int currentLider;
 	public static Message currentEpochMessage;
@@ -74,10 +76,10 @@ public class Node {
 		LocalTime time = LocalTime.parse(startTime, formatter); // time in config
 		String formattedTime = LocalTime.now().format(formatter); // current time
 		LocalTime now = LocalTime.parse(formattedTime, formatter);
-		
+
 		return time.isBefore(now);
 	}
-	
+
 	private static void recoverLider(int numberOfRounds) {
 		for (int i = 0; i < numberOfRounds; i++) {
 			rd.nextInt();
@@ -169,6 +171,12 @@ public class Node {
 				case "recovery_rounds":
 					recoveryRounds = Integer.parseInt(args[1]);
 					break;
+				case "confusion_start":
+					confusionStart = Integer.parseInt(args[1]);
+					break;
+				case "confusion_duration":
+					confusionDuration = Integer.parseInt(args[1]);
+					break;
 				}
 			}
 		} catch (IOException e) {
@@ -224,20 +232,25 @@ public class Node {
 
 	public static int electLider() {
 		ProcessLogger.log("Electing new Lider (available nodes " + nodeStreams.size() + ")...", LoggerSeverity.INFO);
-		int index = rd.nextInt(100) % nodeStreams.size();
 
-		int[] keyArray = nodeStreams.keySet().stream().mapToInt(Integer::intValue).toArray();
+		if (currentEpoch < confusionStart || currentEpoch >= (confusionStart + confusionDuration)) {
+			int index = rd.nextInt(100) % nodeStreams.size();
 
-		currentLider = keyArray[index];
+			int[] keyArray = nodeStreams.keySet().stream().mapToInt(Integer::intValue).toArray();
 
-		ProcessLogger.log("New Lider is " + keyArray[index], LoggerSeverity.INFO);
+			currentLider = keyArray[index];
+		} else {
+			currentLider = currentEpoch % nodeStreams.size();
+			// Consume random
+			rd.nextInt();
+		}
+		ProcessLogger.log("New Lider is " + currentLider, LoggerSeverity.INFO);
+
 		return currentLider;
 	}
 
 	private static void propose() {
 		Message m;
-		// ProcessLogger.log("--------------------- PROPOSE PHASE
-		// ---------------------", LoggerSeverity.INFO);
 
 		if (currentLider != nodeId) {
 			ProcessLogger.log("Is not current epoch Lider\n\"Waiting for proposed block\"", LoggerSeverity.INFO);
@@ -373,7 +386,8 @@ public class Node {
 
 	public static void answerRecovery(int sender) {
 
-		Message m = new Message(nodeId, blockChain, notarizedChain, currentEpoch + recoveryRounds, MessageType.RECOVERY_ANSWER);
+		Message m = new Message(nodeId, blockChain, notarizedChain, currentEpoch + recoveryRounds,
+				MessageType.RECOVERY_ANSWER);
 
 		String nodeAddress = allNodes.get(sender);
 
@@ -402,7 +416,7 @@ public class Node {
 		Message m = new Message(MessageType.RECOVERY, nodeId);
 
 		for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
-			if(entry.getKey() == nodeId) {
+			if (entry.getKey() == nodeId) {
 				continue;
 			}
 			ProcessLogger.log("Sending recovery message to node with ID " + entry.getKey(), LoggerSeverity.INFO);
@@ -414,11 +428,11 @@ public class Node {
 
 	public synchronized static void receiveRecovery(Message m) {
 
-		if(hasRecovered) {
+		if (hasRecovered) {
 			ProcessLogger.log("Already received recovery message (SKIPPING)", LoggerSeverity.INFO);
 			return;
 		}
-		
+
 		blockChain = m.getBlockchain();
 		notarizedChain = m.getNotarizechain();
 		currentEpoch = m.getEpochNumber();
@@ -427,19 +441,19 @@ public class Node {
 
 		long epochDuration = (2 * roudDurationSec) + 1;
 		LocalTime initialStartTime = LocalTime.parse(startTime);
-		//ja tem em conta o incremento das rondas de recuperação?????
+		// ja tem em conta o incremento das rondas de recuperação?????
 		Duration totalIncrement = Duration.ofSeconds(epochDuration * currentEpoch);
 
 		LocalTime newStartTime = initialStartTime.plus(totalIncrement);
 		startTime = newStartTime.toString();
-		
+
 		hasRecovered = true;
-		
+
 		recoverLider(currentEpoch);
 		waitForStartTime();
-		
+
 		canProcessMessages = true;
-		
+
 		try {
 			startEpoch();
 		} catch (IOException e) {
@@ -461,7 +475,7 @@ public class Node {
 				if (roundsToRecover > 0) {
 					roundsToRecover--;
 				}
-				
+
 				currentEpoch++;
 				currentEpochMessage = null;
 				currentBlockToVote = null;
