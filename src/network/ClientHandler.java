@@ -1,5 +1,6 @@
 package network;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -8,6 +9,8 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Queue;
 
+import Logger.LoggerSeverity;
+import Logger.ProcessLogger;
 import broadcast.BroadcastManager;
 import datastructures.Message;
 import datastructures.MessageType;
@@ -34,15 +37,18 @@ class ClientHandler implements Runnable {
 				Message m = (Message) in.readObject();
 
 				if (m.getMessageType().equals(MessageType.RECOVERY)) {
+					ProcessLogger.log("Received recovery message from node with ID " + m.getSender(), LoggerSeverity.INFO);
 					Node.recoveryRequest = true;
 					Node.answerRecovery(m.getSender());
+					continue;
 				}
 				
 				if (m.getMessageType().equals(MessageType.RECOVERY_ANSWER)) {
-					
+					Node.receiveRecovery(m);
 				}
 				
-				if(Node.roundsToRecover > 0) {
+				if(Node.roundsToRecover > 0 || !Node.canProcessMessages) {
+					ProcessLogger.log("Skipping message (in RECOVERY MODE)", LoggerSeverity.INFO);
 					continue;
 				}
 				
@@ -50,7 +56,10 @@ class ClientHandler implements Runnable {
 					messageQueue.offer(m); // Adicionando mensagens à fila
 				}
 			}
-		} catch (IOException | ClassNotFoundException e) {
+		}catch (EOFException e) {
+			ProcessLogger.log("Node crashed", LoggerSeverity.INFO);
+		} 
+		catch (IOException | ClassNotFoundException e) {
 			e.printStackTrace();
 		}
 	}

@@ -58,8 +58,21 @@ run_jar() {
     fi
 }
 
+# Function to update the start time in the config.txt file
+update_start_time() {
+    START_TIME=$(date -d '+1 minutes' +%H:%M:00)
+    sed -i "s/start_time=.*/start_time=$START_TIME/" config.txt
+}
+
+# Function to delete log files
+delete_logs() {
+    find . -type f -name '*.log' -delete
+}
+
 # Main execution
 echo "Starting compilation..."
+update_start_time
 compile_java
 create_jar
+delete_logs
 #run_jar

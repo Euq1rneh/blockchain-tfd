@@ -48,13 +48,19 @@ public class Node {
 	// public static volatile boolean canDeliver = false;
 	public static volatile boolean close = false;
 
+	//Config variables
 	private static String startTime; // Configured start time for connections
 	private static int seed;
 	private static int roudDurationSec;
 	private static int recoveryRounds;
 
+	//Recovery variables
 	public static boolean recoveryRequest;
 	public static int roundsToRecover;
+	public static boolean hasRecovered;
+	public static boolean canProcessMessages = true;
+	
+	//Protocol variables
 	public static int currentEpoch;
 	public static int currentLider;
 	public static Message currentEpochMessage;
@@ -68,8 +74,14 @@ public class Node {
 		LocalTime time = LocalTime.parse(startTime, formatter); // time in config
 		String formattedTime = LocalTime.now().format(formatter); // current time
 		LocalTime now = LocalTime.parse(formattedTime, formatter);
-
+		
 		return time.isBefore(now);
+	}
+	
+	private static void recoverLider(int numberOfRounds) {
+		for (int i = 0; i < numberOfRounds; i++) {
+			rd.nextInt();
+		}
 	}
 
 	private static void waitForStartTime() {
@@ -246,7 +258,7 @@ public class Node {
 			m = new Message(MessageType.PROPOSE, nodeId, null, newBlock);
 
 			for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
-//				ProcessLogger.log("Sending message to node with ID " + entry.getKey(), LoggerSeverity.INFO);
+				ProcessLogger.log("Sending message to node with ID " + entry.getKey(), LoggerSeverity.INFO);
 				ObjectOutputStream stream = entry.getValue();
 
 				bm.send(m, stream);
@@ -361,7 +373,7 @@ public class Node {
 
 	public static void answerRecovery(int sender) {
 
-		Message m = new Message(nodeId, blockChain, notarizedChain, currentEpoch);
+		Message m = new Message(nodeId, blockChain, notarizedChain, currentEpoch + recoveryRounds, MessageType.RECOVERY_ANSWER);
 
 		String nodeAddress = allNodes.get(sender);
 
@@ -381,8 +393,8 @@ public class Node {
 			System.out.printf("Could not connect to node with address %s\n", nodeAddress);
 		}
 
+		ProcessLogger.log("Sending recovery answer to node with ID " + sender, LoggerSeverity.INFO);
 		bm.send(m, nodeStreams.get(sender));
-
 	}
 
 	private static void sendRecovery() {
@@ -390,7 +402,10 @@ public class Node {
 		Message m = new Message(MessageType.RECOVERY, nodeId);
 
 		for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
-//			ProcessLogger.log("Sending message to node with ID " + entry.getKey(), LoggerSeverity.INFO);
+			if(entry.getKey() == nodeId) {
+				continue;
+			}
+			ProcessLogger.log("Sending recovery message to node with ID " + entry.getKey(), LoggerSeverity.INFO);
 			ObjectOutputStream stream = entry.getValue();
 
 			bm.send(m, stream);
@@ -399,10 +414,14 @@ public class Node {
 
 	public synchronized static void receiveRecovery(Message m) {
 
+		if(hasRecovered) {
+			ProcessLogger.log("Already received recovery message (SKIPPING)", LoggerSeverity.INFO);
+			return;
+		}
+		
 		blockChain = m.getBlockchain();
 		notarizedChain = m.getNotarizechain();
 		currentEpoch = m.getEpochNumber();
-		recoveryRequest = true;
 
 		// calcular o tempo de inicio de scheduler (Incio + numeroR * TempoE)
 
@@ -414,7 +433,13 @@ public class Node {
 		LocalTime newStartTime = initialStartTime.plus(totalIncrement);
 		startTime = newStartTime.toString();
 		
+		hasRecovered = true;
+		
+		recoverLider(currentEpoch);
 		waitForStartTime();
+		
+		canProcessMessages = true;
+		
 		try {
 			startEpoch();
 		} catch (IOException e) {
@@ -436,6 +461,7 @@ public class Node {
 				if (roundsToRecover > 0) {
 					roundsToRecover--;
 				}
+				
 				currentEpoch++;
 				currentEpochMessage = null;
 				currentBlockToVote = null;
@@ -488,10 +514,10 @@ public class Node {
 		System.out.printf("Node ID: %d\n", nodeId);
 
 		if (shouldEnterRecoveryMode()) {
+			canProcessMessages = false;
 			connectToNode();
 			// send recovery message
 			sendRecovery();
-
 		} else {
 			waitForStartTime();
 			connectToNode();

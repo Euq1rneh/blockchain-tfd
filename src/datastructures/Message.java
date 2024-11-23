@@ -29,15 +29,15 @@ public class Message implements Serializable{
 		this.block = null;
 		this.message = null;
 
-		this.type = MessageType.RECOVERY;
+		this.type = type;
 		this.sender = sender;
 	}
 	
-	public Message(int sender, List<Block> blockchain, List<Block> notarizechain, int epochNumber) {
+	public Message(int sender, List<Block> blockchain, List<Block> notarizechain, int epochNumber, MessageType type) {
 		this.block = null;
 		this.message = null;
 
-		this.type = MessageType.RECOVERY;
+		this.type = type;
 		this.sender = sender;
 		this.blockchain = blockchain;
 		this.notarizechain = notarizechain;
