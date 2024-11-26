@@ -15,6 +15,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -36,14 +37,20 @@ public class Node {
 	private static String selfAddress;
 	private static HashMap<Integer, String> allNodes = new HashMap<Integer, String>(); // List of all nodes read from
 																						// file
-
 	private static volatile HashMap<Integer, Socket> nodeSockets = new HashMap<Integer, Socket>();
 	private static volatile HashMap<Integer, ObjectOutputStream> nodeStreams = new HashMap<Integer, ObjectOutputStream>();
+
+	// Blockchain variables
+	private static HashMap<Integer, List<Block>> forkBlocks = new HashMap<Integer, List<Block>>(); // contains any
+																									// blocks originates
+																									// from any fork
+	private static List<Block> forkHeads = new ArrayList<Block>(); // contains the blocks that originated forks
+
 	private static volatile List<Block> blockChain = new ArrayList<Block>(); // only contains finalized blocks
 	public static volatile List<Block> notarizedChain = new ArrayList<Block>(); // only contains notarized blocks
 
 	public static HashMap<Block, List<Integer>> votesForBlock = new HashMap<Block, List<Integer>>();
-	
+
 	// public static volatile boolean canDeliver = false;
 	public static volatile boolean close = false;
 
@@ -64,7 +71,7 @@ public class Node {
 	// Protocol variables
 	public static int currentEpoch;
 	public static int currentLider;
-	
+
 	private static BroadcastManager bm;
 	private static Random rd;
 
@@ -283,10 +290,10 @@ public class Node {
 			ProcessLogger.log("Message was null", LoggerSeverity.INFO);
 			return;
 		}
-		
+
 		Block messageBlock;
-		
-		if ((messageBlock =m.getBlock()) == null) {
+
+		if ((messageBlock = m.getBlock()) == null) {
 			System.out.println("Could not vote. Block in message was null");
 			return;
 		}
@@ -309,32 +316,118 @@ public class Node {
 
 	}
 
+	private static void printForks() {
+		ProcessLogger.log("=========Printing chains=============", LoggerSeverity.INFO);
+
+		ProcessLogger.log("BlockChain", LoggerSeverity.INFO);
+		StringBuilder sb = new StringBuilder();
+		for (Block block : blockChain) {
+			sb.append(block.getEpoch() + " -> ");
+		}
+		ProcessLogger.log(sb.toString(), LoggerSeverity.INFO);
+		
+		sb = new StringBuilder();
+		ProcessLogger.log("Fork heads", LoggerSeverity.INFO);
+		for (Map.Entry<Integer, List<Block>> entry : forkBlocks.entrySet()) {
+			Integer key = entry.getKey();
+			List<Block> val = entry.getValue();
+			ProcessLogger.log("Blocks originating from head " + key, LoggerSeverity.INFO);
+			for (Block block2 : val) {
+				sb.append(block2.getEpoch() + ",");
+			}
+			ProcessLogger.log(sb.toString(), LoggerSeverity.INFO);
+		}
+		ProcessLogger.log("\n=====================================", LoggerSeverity.INFO);
+	}
+
+	private static boolean blockWasProcessed(int blockEpoch) {
+		for (Block block : blockChain) {
+			if(block.getEpoch() == blockEpoch)
+				return true;
+		}
+		
+		for (Block block : forkHeads) {
+			if(block.getEpoch() == blockEpoch)
+				return true;
+		}
+
+		for (Map.Entry<Integer, List<Block>> entry : forkBlocks.entrySet()) {
+			List<Block> blockList = entry.getValue();
+			for (Block block : blockList) {
+				if(block.getEpoch() == blockEpoch)
+					return true;
+			}
+		}
+
+		return false;
+	}
+
 	public synchronized static void receivedVoteHandler(Block currentBlockToVote) {
 
-		if (currentBlockToVote.isNotarized()) {
+		if (blockWasProcessed(currentBlockToVote.getEpoch())) {
+			ProcessLogger.log("Block was already processed. Skipping process-phase", LoggerSeverity.INFO);
 			return;
 		}
 
-		if(votesForBlock.get(currentBlockToVote).size() <= (int) (nodeStreams.size() / 2)) {
+		if (votesForBlock.get(currentBlockToVote).size() <= (int) (nodeStreams.size() / 2)) {
 			return; // Não tem votos suficientes, sai
 		}
 
 		ProcessLogger.log("Necessary votes received. Notarizing block...", LoggerSeverity.INFO);
 
 		currentBlockToVote.notarize();
-		notarizedChain = new ArrayList<Block>(currentBlockToVote.getParentChain());
+
+		ProcessLogger.log("Processing vote for block from epoch " + currentBlockToVote.getEpoch(), LoggerSeverity.INFO);
+
+		List<Block> parentChain = currentBlockToVote.getParentChain();
+		Block parent = parentChain.get(parentChain.size() - 1);
+
+		ProcessLogger.log("Block epoch " + currentBlockToVote.getEpoch(), LoggerSeverity.INFO);
+		ProcessLogger.log("Parent epoch " + parent.getEpoch(), LoggerSeverity.INFO);
+
+		if (forkHeads.contains(parent)) {
+			ProcessLogger.log("Parent is a fork head", LoggerSeverity.INFO);
+
+			List<Block> blocks = forkBlocks.get(parent.getEpoch());
+			if (!blocks.contains(currentBlockToVote)) {
+				blocks.add(currentBlockToVote);
+			}
+		} else {
+			boolean inExistingFork = false;
+			ProcessLogger.log("Checking forks for existing parent...", LoggerSeverity.INFO);
+			for (Map.Entry<Integer, List<Block>> entry : forkBlocks.entrySet()) {
+				List<Block> val = entry.getValue();
+				if (val.contains(parent) && !val.contains(currentBlockToVote)) {
+					ProcessLogger.log("Parent is in an already existing fork. Adding...", LoggerSeverity.INFO);
+					val.add(currentBlockToVote);
+					inExistingFork = true;
+					break;
+				}
+			}
+
+			if (!inExistingFork) {
+				ProcessLogger.log("Adding new fork", LoggerSeverity.INFO);
+				if(!forkHeads.contains(currentBlockToVote) && !forkBlocks.containsKey(currentBlockToVote.getEpoch())) {
+					forkHeads.add(currentBlockToVote);
+					forkBlocks.put(currentBlockToVote.getEpoch(), new ArrayList<Block>());	
+				}
+			}
+		}
+		printForks();
+
+		notarizedChain = new ArrayList<Block>(parentChain);
 		notarizedChain.add(currentBlockToVote);
 
-		votesForBlock.remove(currentBlockToVote);//no longer need to collect votes for block
-		
+		votesForBlock.remove(currentBlockToVote);// no longer need to collect votes for block
+
 //	    ProcessLogger.log("NotarizedChain with lenght: " + notarizedChain.size(), LoggerSeverity.INFO);
 
 		for (Map.Entry<Block, List<Integer>> entry : votesForBlock.entrySet()) {
 			Block b = entry.getKey();
 			List<Integer> val = entry.getValue();
-			ProcessLogger.log("Votes for block from epoch " + b.getEpoch() + "= "+ val.size(), LoggerSeverity.INFO);
+			ProcessLogger.log("Votes for block from epoch " + b.getEpoch() + "= " + val.size(), LoggerSeverity.INFO);
 		}
-		
+
 		StringBuilder sb = new StringBuilder();
 		sb.append("⊥");
 		for (int i = 1; i < notarizedChain.size(); i++) {
@@ -364,7 +457,7 @@ public class Node {
 				blockChain = new ArrayList<Block>(); // leave the cleaning to the garbage collector
 				blockChain.addAll(notarizedChain);
 				blockChain.remove(notarizedChain.size() - 1);
-				
+
 				StringBuilder sb = new StringBuilder();
 				sb.append("⊥");
 				for (int i = 1; i < blockChain.size(); i++) {
