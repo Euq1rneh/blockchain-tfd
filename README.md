@@ -51,3 +51,6 @@ The `config.txt` should look something like this:
 ## Shortcommings
 - Phase 1: Nothing to report. All requirements met.
 
+## References
+DAG implementation - https://github.com/ajs1998/Dag
+
