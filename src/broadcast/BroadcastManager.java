@@ -38,18 +38,19 @@ public class BroadcastManager {
 				return;
 			}
 
-			if(Node.notarizedChain.contains(messageBlock)) {
+			if(Node.blockchain.contains(messageBlock.getEpoch())) {
 				//ignore propose (likely an echo) block is already notarized
 				return;
 			}
 			
-			if (!Node.votesForBlock.containsKey(messageBlock)) {
-				Node.votesForBlock.put(messageBlock, new ArrayList<Integer>());
+			if (!Node.votesForBlock.containsKey(messageBlock.getEpoch())) {
+				Node.votesForBlock.put(messageBlock.getEpoch(), new ArrayList<Integer>());
 				echoMessage(echoNodes, m);
 				Node.vote(m);
+				return;
 			}
 		}
-
+		
 		if (m.getMessageType().equals(MessageType.VOTE)) {
 
 			Block messageBlock;
@@ -59,16 +60,17 @@ public class BroadcastManager {
 				return;
 			}
 			
-			if(Node.notarizedChain.contains(messageBlock)) {
+			if(Node.blockchain.contains(messageBlock.getEpoch())) {
 				//ignore propose (likely an echo) block is already notarized
 				return;
 			}
 
-			if (Node.votesForBlock.containsKey(messageBlock)) {
-				if (Node.votesForBlock.get(messageBlock).contains(m.getSender())) {
+			if (Node.votesForBlock.containsKey(messageBlock.getEpoch())) {
+				if (Node.votesForBlock.get(messageBlock.getEpoch()).contains(m.getSender())) {
 					return;
 				}
-				Node.votesForBlock.get(messageBlock).add(m.getSender());
+				
+				Node.votesForBlock.get(messageBlock.getEpoch()).add(m.getSender());
 				echoMessage(echoNodes, m);
 				Node.receivedVoteHandler(messageBlock);
 			}

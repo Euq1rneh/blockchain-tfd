@@ -60,7 +60,7 @@ run_jar() {
 
 # Function to update the start time in the config.txt file
 update_start_time() {
-    START_TIME=$(date -d '+1 minutes' +%H:%M:00)
+    START_TIME=$(date -d '+1 minutes' +%H:%M:%S)
     sed -i "s/start_time=.*/start_time=$START_TIME/" config.txt
 }
 

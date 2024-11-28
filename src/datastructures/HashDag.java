@@ -21,7 +21,7 @@ public class HashDag<E> implements Serializable{
      * The backing {@link Map} that represents this DAG.
      * Each key of the map is a node, and each value is a collection of that node's outgoing nodes.
      */
-    private final Map<E, Collection<E>> map;
+    private final HashMap<E, Collection<E>> map;
 
     /**
      * Constructs an empty {@link HashDag}

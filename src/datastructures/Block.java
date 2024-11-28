@@ -18,14 +18,24 @@ public class Block implements Serializable{
 	private final int epoch;
 	private final int length;
 	private final Transaction[] transactions;
-	private List<Block> parentChain; // to avoid sending another message
+	private BlockChain blockchain;
+	private int parentBlockEpoch;
 	private boolean notarized;
 	
-	public Block(int epoch, int length, Transaction[] transactions, List<Block> parentChain, Block prevBlock) {
+//	public Block(int epoch, int length, Transaction[] transactions, List<Block> parentChain, Block prevBlock) {
+//		this.epoch = epoch;
+//		this.length = length;
+//		this.transactions = transactions;
+//		this.parentChain = parentChain;
+//		calculateHash(prevBlock);
+//	}
+	
+	public Block(int epoch, int length, Transaction[] transactions, BlockChain blockchain, Block prevBlock) {
 		this.epoch = epoch;
 		this.length = length;
 		this.transactions = transactions;
-		this.parentChain = parentChain;
+		this.blockchain = blockchain;
+		this.parentBlockEpoch = prevBlock == null ? 0 : prevBlock.getEpoch();
 		calculateHash(prevBlock);
 	}
 	
@@ -43,6 +53,10 @@ public class Block implements Serializable{
 	
 	public Transaction[] getTransactions() {
 		return transactions;
+	}
+	
+	public int getParentBlockEpoch() {
+		return parentBlockEpoch;
 	}
 	
 	private void calculateHash(Block prevBlock) {
@@ -69,11 +83,11 @@ public class Block implements Serializable{
 	public void notarize() {
 		this.notarized = true;
 	}
-
-	public List<Block> getParentChain(){
-		List<Block> p = parentChain;
-		parentChain = null;
-		return p;
+	
+	public BlockChain getBlockChain() {
+		BlockChain bc = blockchain;
+		blockchain = null;
+		return bc;
 	}
 	
 	public byte[] getBytes() {
@@ -96,7 +110,7 @@ public class Block implements Serializable{
 		int result = 1;
 		result = prime * result + Arrays.hashCode(hash);
 		result = prime * result + Arrays.hashCode(transactions);
-		result = prime * result + Objects.hash(epoch, length, notarized, parentChain);
+		result = prime * result + Objects.hash(blockchain, epoch, length, notarized, parentBlockEpoch);
 		return result;
 	}
 
@@ -109,12 +123,8 @@ public class Block implements Serializable{
 		if (getClass() != obj.getClass())
 			return false;
 		Block other = (Block) obj;
-		return epoch == other.epoch && Arrays.equals(hash, other.hash) && length == other.length
-				&& notarized == other.notarized && Objects.equals(parentChain, other.parentChain)
+		return Objects.equals(blockchain, other.blockchain) && epoch == other.epoch && Arrays.equals(hash, other.hash)
+				&& length == other.length && notarized == other.notarized && parentBlockEpoch == other.parentBlockEpoch
 				&& Arrays.equals(transactions, other.transactions);
 	}
-	
-	
-	
-	
 }
