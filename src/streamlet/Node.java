@@ -56,7 +56,7 @@ public class Node {
 	private static String startTime; // Configured start time for connections
 	private static int seed;
 	private static int roudDurationSec;
-	private static int recoveryRounds;
+	private static int recoveryEpochs;
 	public static int confusionStart;
 	public static int confusionDuration;
 
@@ -170,8 +170,8 @@ public class Node {
 					startTime = args[1];
 					break;
 
-				case "recovery_rounds":
-					recoveryRounds = Integer.parseInt(args[1]);
+				case "recovery_epochs":
+					recoveryEpochs = Integer.parseInt(args[1]);
 					break;
 				case "confusion_start":
 					confusionStart = Integer.parseInt(args[1]);
@@ -424,7 +424,7 @@ public class Node {
 
 	public static void answerRecovery(int sender) {
 
-		Message m = new Message(nodeId, finalBlockchain, blockchain, currentEpoch + recoveryRounds,
+		Message m = new Message(nodeId, finalBlockchain, blockchain, currentEpoch + recoveryEpochs,
 				MessageType.RECOVERY_ANSWER);
 
 		String nodeAddress = allNodes.get(sender);
@@ -507,7 +507,7 @@ public class Node {
 			@Override
 			public void run() {
 				if (recoveryRequest) {
-					roundsToRecover += recoveryRounds;
+					roundsToRecover += recoveryEpochs;
 					recoveryRequest = false;
 				}
 				if (roundsToRecover > 0) {

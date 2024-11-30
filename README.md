@@ -23,16 +23,16 @@ A logger is used to simplify the debbuging process and a log file is created for
 - `peers.txt`: Configuration file that contains the `ID`, `IP`, `Port` of each of the nodes in the network
 
 ## Installation and Setup
-1. **Compilation scrip**: Run the compilation script. This will generate a jar file to the `dist` directory. 
-   ```bash
-   ./compilation-script
-   ```
-2. **Check the config files**: Check that the configuration files are correct.  
+1. **Check the config files**: Check that the configuration files are correct.  
 The `config.txt` should look something like this:
     ```
-    start_time=16:56:00 //Time for the program to start
-    seed=123456789 //Seed for lider election
-    round_duration_sec=2 //Duration of a round in the streamlet protocol
+    start_time=16:56:00 	//Time for the program to start
+    seed=123456789 			//Seed for lider election
+    round_duration_sec=2 	//Duration of a round in the streamlet protocol
+	recovery_epochs=2 		//Number of epochs used to allow a node to recover
+	confusion_start=5		//Epoch where a period of confusion should start
+	confusion_duration=5	//Number of epochs the period of confusion should last
+    
     ```
     The `peers.txt` should look something like this:
     ```
@@ -42,15 +42,21 @@ The `config.txt` should look something like this:
     4 127.0.0.1:44444
     5 127.0.0.1:55555
     ```
+2. **Compilation script**: Run the compilation script.  
+This will generate a jar file to the `dist` directory. It also increments the start time, in the config file, by 1 minute based on the current time.  
+   ```bash
+   ./compilation-script
+   ```
 3. **Run the program**: If your peer.txt file contains 5 lines (which correspond to 5 different nodes), you'll need to run 5 instances of the program with the following line (assuming you're in the root directory):
     ```bash
-    java -jar /dist/streamlet.jar <peerID> <peerFile> <configFile>
+    java -jar dist/streamlet.jar <peerID> <peerFile> <configFile>
     ```
     Replace `peerFile`, `configFile` with the paths for those files and `peerID` with the appropriate ID contained in your `peerFile`.
 
 ## Shortcommings
 - Phase 1: Nothing to report. All requirements met.
+- Phase 2: Nothing to report. All requirements met.
 
 ## References
-DAG implementation - https://github.com/ajs1998/Dag
+DAG implementation used for blockchain logic- https://github.com/ajs1998/Dag
 
