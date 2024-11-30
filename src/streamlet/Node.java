@@ -44,7 +44,7 @@ public class Node {
 	private static volatile HashMap<Integer, ObjectOutputStream> nodeStreams = new HashMap<Integer, ObjectOutputStream>();
 
 	// Blockchain variables
-	private static Set<Block> processedBlocks = new HashSet<Block>();
+//	private static Set<Block> processedBlocks = new HashSet<Block>();
 	public static BlockChain blockchain = new BlockChain();
 	private static List<Integer> finalBlockchain = new ArrayList<Integer>();
 
@@ -242,21 +242,14 @@ public class Node {
 
 			currentLider = keyArray[index];
 		} else {
-			currentLider = currentEpoch % nodeStreams.size();
+			int[] keyArray = nodeStreams.keySet().stream().mapToInt(Integer::intValue).toArray();
+			currentLider = keyArray[currentEpoch % nodeStreams.size()];
 			// Consume random
 			rd.nextInt();
 		}
 		ProcessLogger.log("New Lider is " + currentLider, LoggerSeverity.INFO);
 
 		return currentLider;
-	}
-
-	private static Block findBlock(int epoch) {
-		for (Block b : processedBlocks) {
-			if(b.getEpoch() == epoch)
-				return b;
-		}
-		return null;
 	}
 	
 	private static void propose() {
@@ -269,18 +262,19 @@ public class Node {
 			int parentChainSize = longestChain.size();
 //			int parentChainSize = notarizedChain.size();
 
-			int parentIndex = 0; // the index of the last block in the parent chain
+			int parentEpoch = 0; // the index of the last block in the parent chain
 
 			if (parentChainSize > 1) {
-				parentIndex = longestChain.get(parentChainSize - 1);
+				parentEpoch = longestChain.get(parentChainSize - 1);
 			}
 
 			ProcessLogger.log("\n\n\nLongest chain: " + longestChain.toString() +"\n\n\n", LoggerSeverity.INFO);
 			
-			ProcessLogger.log("PARENT INDEX: "+ parentIndex, LoggerSeverity.INFO);
+			ProcessLogger.log("PARENT EPOCH: "+ parentEpoch, LoggerSeverity.INFO);
 			//retrieve block from a list of already processed blocks
-			Block parent = findBlock(parentIndex);
+			Block parent = blockchain.findBlock(parentEpoch);
 
+			ProcessLogger.log("PARENT EPOCH (fetched block): "+ parent.getEpoch(), LoggerSeverity.INFO);
 			// set transactions 
 			Random rd = new Random();
 			int receiverId = rd.nextInt() % nodeSockets.size();
@@ -369,11 +363,11 @@ public class Node {
 
 //		blockchain = parentChain;
 		blockchain.union(parentChain);
-		blockchain.addBlock(parent, currentBlockToVote.getEpoch());
+		blockchain.addBlock(parent, currentBlockToVote);
 
 		System.out.println("Blockchain State\n" + blockchain.toString());
 
-		processedBlocks.add(currentBlockToVote);
+//		processedBlocks.add(currentBlockToVote);
 		votesForBlock.remove(currentBlockToVote.getEpoch());// no longer need to collect votes for block
 
 		finalizeBlockchain();
@@ -407,6 +401,8 @@ public class Node {
 				blockchain.resolveBlockchain(longestChain);
 				finalBlockchain.remove(index + 2);
 
+				//TODO: escrever para ficheiro a final
+				
 				StringBuilder sb = new StringBuilder();
 				sb.append("⊥");
 				for (int i = 1; i < finalBlockchain.size(); i++) {
@@ -425,57 +421,6 @@ public class Node {
 		ProcessLogger.log("Last three blocks where not from consecutive epochs. Chain was not finalized",
 				LoggerSeverity.INFO);
 	}
-
-//	private synchronized static void finalizeChain() {
-//
-//		if (notarizedChain.size() - 1 < 3) {
-////			ProcessLogger.log("FINALIZE: Could not finalize chain. Not enough blocks", LoggerSeverity.INFO);
-//			return;
-//		}
-//
-//		int index = notarizedChain.size() - 1;
-//		Block final1 = notarizedChain.get(index);
-//		index--;
-//		Block final2 = notarizedChain.get(index);
-//		index--;
-//		Block final3 = notarizedChain.get(index);
-//
-//		if (final1.getEpoch() == (final2.getEpoch() + 1) && final2.getEpoch() == (final3.getEpoch() + 1)) {
-//			if ((notarizedChain.size() - 1) > finalizedChain.size()) {
-//				finalizedChain = new ArrayList<Block>(); // leave the cleaning to the garbage collector
-//				finalizedChain.addAll(notarizedChain);
-//				finalizedChain.remove(notarizedChain.size() - 1);
-//
-////				StringBuilder sb = new StringBuilder();
-////				sb.append("⊥");
-////				for (int i = 1; i < finalizedChain.size(); i++) {
-////					sb.append(" -> epoch " + finalizedChain.get(i).getEpoch());
-////				}
-////				ProcessLogger.log("FINALIZE: Finalized a new chain:" + sb.toString(), LoggerSeverity.INFO);
-//				return;
-//			}
-//
-////			StringBuilder sb = new StringBuilder();
-////			sb.append("⊥");
-////			for (int i = 1; i < notarizedChain.size(); i++) {
-////				sb.append(" -> epoch " + notarizedChain.get(i).getEpoch());
-////			}
-////
-////			ProcessLogger.log("FINALIZED: Nothing new to notarize\nCurrent notarized chain:\n" + sb.toString(),
-////					LoggerSeverity.INFO);
-//			return;
-//		}
-////		StringBuilder sb = new StringBuilder();
-////		sb.append("⊥");
-////		for (int i = 1; i < notarizedChain.size(); i++) {
-////			sb.append(" -> epoch " + notarizedChain.get(i).getEpoch());
-////		}
-////
-////		ProcessLogger.log(
-////				"FINALIZE: Last three blocks where not from consecutive epochs. Chain was not finalized\nCurrent notarized chain:\n"
-////						+ sb.toString(),
-////				LoggerSeverity.INFO);
-//	}
 
 	public static void answerRecovery(int sender) {
 
@@ -601,11 +546,8 @@ public class Node {
 
 		Block genesisBlock = new Block(0, 0, null, null, null);
 		finalBlockchain.add(0);
-		processedBlocks.add(genesisBlock);
-//		notarizedChain.add(genesisBlock);
-		blockchain.addGenesisBlock();
+		blockchain.addGenesisBlock(genesisBlock);
 		
-
 		bm = new BroadcastManager(nodeId);
 		try {
 			ProcessLogger.setupLogger("process-log-node" + nodeId);
