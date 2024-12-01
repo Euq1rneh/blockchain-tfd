@@ -36,6 +36,7 @@ The `config.txt` should look something like this:
     ```
 > [!NOTE]
 > The value of the configuration parameter round_duration_sec shoul be proportional to the value of confusion_duration
+
 The `peers.txt` should look something like this:
     ```
     1 127.0.0.1:11111 //id ip:port
