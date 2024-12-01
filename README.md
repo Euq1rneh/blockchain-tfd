@@ -34,9 +34,7 @@ The `config.txt` should look something like this:
 	confusion_duration=5	//Number of epochs the period of confusion should last
     
     ```
-> [!NOTE]
-> The value of the configuration parameter round_duration_sec shoul be proportional to the value of confusion_duration  
-The `peers.txt` should look something like this:
+    The `peers.txt` should look something like this:
     ```
     1 127.0.0.1:11111 //id ip:port
     2 127.0.0.1:22222
@@ -55,10 +53,12 @@ This will generate a jar file to the `dist` directory. It also increments the st
     ```
     Replace `peerFile`, `configFile` with the paths for those files and `peerID` with the appropriate ID contained in your `peerFile`.
 
+> [!NOTE]
+> The value of the configuration parameter `round_duration_sec` should be directly proportional to the value of `confusion_duration`
+
 ## Shortcommings
 - Phase 1: Nothing to report. All requirements met.
 - Phase 2: Nothing to report. All requirements met.
 
 ## References
 DAG implementation used for blockchain logic- https://github.com/ajs1998/Dag
-
