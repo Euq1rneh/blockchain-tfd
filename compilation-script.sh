@@ -67,6 +67,7 @@ update_start_time() {
 # Function to delete log files
 delete_logs() {
     find . -type f -name '*.log' -delete
+    find . -type f -name 'blockchain_log*' -delete
 }
 
 # Main execution

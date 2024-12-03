@@ -16,7 +16,6 @@ public class Message implements Serializable{
 	private List<Integer> finalizedChain;
 	private BlockChain blockchain;
 //	private List<Block> notarizechain;
-	private int epochNumber;
 	
 	
 	public Message(MessageType type, int sender, Message message, Block block) {
@@ -34,16 +33,14 @@ public class Message implements Serializable{
 		this.sender = sender;
 	}
 	
-	public Message(int sender, List<Integer> finalizedChain, BlockChain blockchain, int epochNumber, MessageType type) {
+	public Message(int sender, List<Integer> finalizedChain, BlockChain blockchain, MessageType type) {
 		this.block = null;
 		this.message = null;
 
 		this.type = type;
 		this.sender = sender;
 		this.finalizedChain = finalizedChain;
-		this.blockchain = blockchain;
-		this.epochNumber = epochNumber;
-		
+		this.blockchain = blockchain;		
 	}
 	
 	public MessageType getMessageType() {
@@ -68,10 +65,6 @@ public class Message implements Serializable{
 
 	public BlockChain getBlockchain() {
 		return blockchain;
-	}
-
-	public int getEpochNumber() {
-		return epochNumber;
 	}
 
 	@Override

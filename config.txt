@@ -1,6 +1,6 @@
-start_time=16:47:57
+start_time=18:11:54
 seed=123456789
-round_duration_sec=3
-recovery_epochs=2
-confusion_start=5
-confusion_duration=5
+round_duration_sec=2
+recovery_epochs=3
+confusion_start=0
+confusion_duration=0

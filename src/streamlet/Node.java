@@ -3,8 +3,10 @@ package streamlet;
 import network.NodeServer;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
@@ -373,6 +375,36 @@ public class Node {
 		finalizeBlockchain();
 	}
 
+	private static void logToFile() {
+		 try (BufferedWriter writer = new BufferedWriter(new FileWriter("blockchain_log-"+nodeId+".txt", true))) {
+	            // Loop through the first 10 blocks (or fewer if there aren't 10)
+	            int blockCount = Math.min(10, finalBlockchain.size());
+	            for (int i = 0; i < blockCount; i++) {
+	                int epoch = finalBlockchain.get(0);
+	                String epochString = (epoch == 0) ? "⊥" : String.valueOf(epoch);
+	                writer.write("epoch " + epochString + " -> ");
+	                finalBlockchain.remove(0);
+	            }
+	        } catch (IOException e) {
+	        	
+	        }
+	}
+	
+	private static void updatechain(List<Integer> longestchain) {
+		boolean canAdd = false;
+		for (Integer block : longestchain) {
+			if(!canAdd && block == finalBlockchain.get(finalBlockchain.size()-1)) {
+				canAdd = true;
+				continue;
+			}
+			
+			if(canAdd) {
+				finalBlockchain.add(block);
+			}
+		}
+		
+	}
+	
 	private synchronized static void finalizeBlockchain() {
 		List<Integer> longestChain = blockchain.findLongestPath();
 		int index = longestChain.size() - 1;
@@ -397,24 +429,32 @@ public class Node {
 
 		if (final1 == (final2 + 1) && final2 == (final3 + 1)) {
 			if ((longestChain.size() - 1) > finalBlockchain.size()) {
-				finalBlockchain = longestChain;
 				blockchain.resolveBlockchain(longestChain);
-				finalBlockchain.remove(index + 2);
+				updatechain(longestChain);
 
-				//TODO: escrever para ficheiro a final
+				finalBlockchain.remove(finalBlockchain.size()-1);
 				
-				StringBuilder sb = new StringBuilder();
-				sb.append("⊥");
-				for (int i = 1; i < finalBlockchain.size(); i++) {
-					sb.append(" -> epoch " + finalBlockchain.get(i));
+//				StringBuilder sb = new StringBuilder();
+//				sb.append("⊥");
+//				for (int i = 1; i < finalBlockchain.size(); i++) {
+//					sb.append(" -> epoch " + finalBlockchain.get(i));
+//				}
+				ProcessLogger.log("Finalized a new chain", LoggerSeverity.INFO);
+				
+				
+				if((finalBlockchain.size() / 2 )> 10) {
+					ProcessLogger.log("Excess of 10 blocks. Log...", LoggerSeverity.INFO);
+					System.out.println(finalBlockchain.toString());
+					logToFile();
+					System.out.println(finalBlockchain.toString());
 				}
-				ProcessLogger.log("FINALIZE: Finalized a new chain:" + sb.toString(), LoggerSeverity.INFO);
+				
 				return;
 			}
 			// nothing new to notarize
 			ProcessLogger.log("FINALIZED: Nothing new to notarize", LoggerSeverity.INFO);
-			System.out.println("-------->LONGEST CHAIN= " + longestChain.toString());
-			System.out.println("-------->FINAL BLOCKCHAIN= " + finalBlockchain.toString());
+//			System.out.println("-------->LONGEST CHAIN= " + longestChain.toString());
+//			System.out.println("-------->FINAL BLOCKCHAIN= " + finalBlockchain.toString());
 			return;
 		}
 
@@ -424,7 +464,7 @@ public class Node {
 
 	public static void answerRecovery(int sender) {
 
-		Message m = new Message(nodeId, finalBlockchain, blockchain, currentEpoch + recoveryEpochs,
+		Message m = new Message(nodeId, finalBlockchain, blockchain,
 				MessageType.RECOVERY_ANSWER);
 
 		String nodeAddress = allNodes.get(sender);
@@ -437,7 +477,7 @@ public class Node {
 
 			stream.flush();
 
-			ProcessLogger.log("Connected to " + nodeAddress, LoggerSeverity.INFO);
+			ProcessLogger.log("Reconnected to " + nodeAddress, LoggerSeverity.INFO);
 
 			nodeSockets.put(sender, s);
 			nodeStreams.put(sender, stream);
@@ -464,6 +504,17 @@ public class Node {
 		}
 	}
 
+	private static int calculateEpoch() {
+	    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+	    LocalTime time = LocalTime.parse(startTime, formatter); 
+	    LocalTime now = LocalTime.now();
+	    long secondsElapsed = java.time.Duration.between(time, now).getSeconds();
+	    
+	    int epochDuration = (roudDurationSec * 2) + 1; 
+	    
+	    return (int) (secondsElapsed / epochDuration);
+	}
+	
 	public synchronized static void receiveRecovery(Message m) {
 
 		if (hasRecovered) {
@@ -473,13 +524,13 @@ public class Node {
 
 		finalBlockchain = m.getFinalizedChain();
 		blockchain = m.getBlockchain();
-		currentEpoch = m.getEpochNumber();
+		currentEpoch = calculateEpoch() + recoveryEpochs; //calculates the current epoch and adds aditional recovery rounds
 
+		System.out.printf("\n\nCalculated epoch %d\n\n", currentEpoch);
 		// calcular o tempo de inicio de scheduler (Incio + numeroR * TempoE)
 
 		long epochDuration = (2 * roudDurationSec) + 1;
 		LocalTime initialStartTime = LocalTime.parse(startTime);
-		// ja tem em conta o incremento das rondas de recuperação?????
 		Duration totalIncrement = Duration.ofSeconds(epochDuration * currentEpoch);
 
 		LocalTime newStartTime = initialStartTime.plus(totalIncrement);

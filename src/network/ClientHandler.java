@@ -48,10 +48,10 @@ class ClientHandler implements Runnable {
 					Node.receiveRecovery(m);
 				}
 
-				if (Node.roundsToRecover > 0 || !Node.canProcessMessages) {
-					ProcessLogger.log("Skipping message (in RECOVERY MODE)", LoggerSeverity.INFO);
-					continue;
-				}
+//				if (Node.roundsToRecover > 0 || !Node.canProcessMessages) {
+//					ProcessLogger.log("Skipping message (in RECOVERY MODE)", LoggerSeverity.INFO);
+//					continue;
+//				}
 
 				synchronized (messageQueue) {
 					messageQueue.offer(m); // Adicionando mensagens à fila
