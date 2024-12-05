@@ -36,23 +36,6 @@ class ClientHandler implements Runnable {
 			while (true) {
 				Message m = (Message) in.readObject();
 
-				if (m.getMessageType().equals(MessageType.RECOVERY)) {
-					ProcessLogger.log("Received recovery message from node with ID " + m.getSender(),
-							LoggerSeverity.INFO);
-					Node.recoveryRequest = true;
-					Node.answerRecovery(m.getSender());
-					continue;
-				}
-
-				if (m.getMessageType().equals(MessageType.RECOVERY_ANSWER)) {
-					Node.receiveRecovery(m);
-				}
-
-//				if (Node.roundsToRecover > 0 || !Node.canProcessMessages) {
-//					ProcessLogger.log("Skipping message (in RECOVERY MODE)", LoggerSeverity.INFO);
-//					continue;
-//				}
-
 				synchronized (messageQueue) {
 					messageQueue.offer(m); // Adicionando mensagens à fila
 				}
@@ -67,19 +50,35 @@ class ClientHandler implements Runnable {
 	// Método para processar mensagens
 	public void processMessages() {
 		if (!messageQueue.isEmpty()) {
-			if (Node.currentEpoch < Node.confusionStart || Node.currentEpoch >= (Node.confusionStart + Node.confusionDuration - 1)) {
+			if (Node.currentEpoch < Node.confusionStart
+					|| Node.currentEpoch >= (Node.confusionStart + Node.confusionDuration - 1)) {
 				Message m;
 				synchronized (messageQueue) {
 					m = messageQueue.poll(); // Remover a mensagem da fila
-				}				
-				
+				}
+
+				if (m.getMessageType().equals(MessageType.RECOVERY)) {
+
+					ProcessLogger.log("Received recovery message from node with ID " + m.getSender(),
+							LoggerSeverity.INFO);
+
+					if (!Node.canProcessMessages) {
+						ProcessLogger.log("Skipping message recovery request (in RECOVERY MODE)", LoggerSeverity.INFO);
+						return;
+					}
+					Node.answerRecovery(m.getSender());
+					return;
+				}
+
+				if (m.getMessageType().equals(MessageType.RECOVERY_ANSWER)) {
+					Node.receiveRecovery(m);
+				}
+
 				try {
 					bm.receive(connectedNodes, m); // Processar a mensagem
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
-			}else {
-				ProcessLogger.log("PIKACHU IS CONFUSED", LoggerSeverity.INFO);
 			}
 		}
 	}

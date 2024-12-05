@@ -5,6 +5,7 @@ import network.NodeServer;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -47,7 +48,6 @@ public class Node {
 	private static volatile HashMap<Integer, ObjectOutputStream> nodeStreams = new HashMap<Integer, ObjectOutputStream>();
 
 	// Blockchain variables
-//	private static Set<Block> processedBlocks = new HashSet<Block>();
 	public static BlockChain blockchain = new BlockChain();
 	private static List<Integer> finalBlockchain = new ArrayList<Integer>();
 
@@ -65,8 +65,6 @@ public class Node {
 	private static String blockchainFilePath;
 
 	// Recovery variables
-	public static boolean recoveryRequest;
-	public static int roundsToRecover;
 	public static boolean hasRecovered;
 	public static boolean canProcessMessages = true;
 
@@ -213,7 +211,7 @@ public class Node {
 				nodeSockets.put(id, s);
 				nodeStreams.put(id, stream);
 			} catch (IOException e) {
-				System.out.printf("Could not connect to node with address %s\n", nodeAddress);
+				ProcessLogger.log("Could not connect to node with address" + nodeAddress, LoggerSeverity.INFO);
 			}
 		}
 	}
@@ -272,13 +270,8 @@ public class Node {
 				parentEpoch = longestChain.get(parentChainSize - 1);
 			}
 
-			ProcessLogger.log("\n\n\nLongest chain: " + longestChain.toString() + "\n\n\n", LoggerSeverity.INFO);
-
-			ProcessLogger.log("PARENT EPOCH: " + parentEpoch, LoggerSeverity.INFO);
 			// retrieve block from a list of already processed blocks
 			Block parent = blockchain.findBlock(parentEpoch);
-
-			ProcessLogger.log("PARENT EPOCH (fetched block): " + parent.getEpoch(), LoggerSeverity.INFO);
 			// set transactions
 			Random rd = new Random();
 			int receiverId = rd.nextInt() % nodeSockets.size();
@@ -313,22 +306,18 @@ public class Node {
 		Block messageBlock;
 
 		if ((messageBlock = m.getBlock()) == null) {
-			System.out.println("Could not vote. Block in message was null");
+			ProcessLogger.log("Could not vote. Block in message was null", LoggerSeverity.INFO);
 			return;
 		}
 
 		if (messageBlock.getLength() <= blockchain.findLongestPath().size()) {
 			ProcessLogger.log("Chain size of proposed block is smaller. Rejecting block...", LoggerSeverity.INFO);
-			// no vote
 			return;
 		}
 
 		Message vote = new Message(MessageType.VOTE, nodeId, null, messageBlock);
 
-//		ProcessLogger.log("Voting on block from epoch " + messageBlock.getEpoch(), LoggerSeverity.INFO);
-
 		for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
-//			ProcessLogger.log("Sending Vote message to node with ID " + entry.getKey(), LoggerSeverity.INFO);
 			ObjectOutputStream stream = entry.getValue();
 			bm.send(vote, stream);
 		}
@@ -362,16 +351,12 @@ public class Node {
 		BlockChain parentChain = currentBlockToVote.getBlockChain();
 
 		int parent = currentBlockToVote.getParentBlockEpoch();
-		ProcessLogger.log("Block epoch " + currentBlockToVote.getEpoch(), LoggerSeverity.INFO);
-		ProcessLogger.log("Parent epoch " + parent, LoggerSeverity.INFO);
 
-//		blockchain = parentChain;
 		blockchain.union(parentChain);
 		blockchain.addBlock(parent, currentBlockToVote);
 
-		System.out.println("Blockchain State\n" + blockchain.toString());
+		ProcessLogger.log("Blockchain State\n" + blockchain.toString(), LoggerSeverity.INFO);
 
-//		processedBlocks.add(currentBlockToVote);
 		votesForBlock.remove(currentBlockToVote.getEpoch());// no longer need to collect votes for block
 
 		finalizeBlockchain();
@@ -379,7 +364,6 @@ public class Node {
 
 	private static void logToFile(boolean append) {
 		try (BufferedWriter writer = new BufferedWriter(new FileWriter(blockchainFilePath, append))) {
-			// Loop through the first 10 blocks (or fewer if there aren't 10)
 			int blockCount = Math.min(10, finalBlockchain.size());
 			for (int i = 0; i < blockCount; i++) {
 				int epoch = finalBlockchain.get(0);
@@ -422,12 +406,12 @@ public class Node {
 		index--;
 		int final3 = longestChain.get(index); // 1
 
-		System.out.println();
-		System.out.println();
+//		System.out.println();
+//		System.out.println();
 		ProcessLogger.log("Last 3 blocks: " + final3 + "," + final2 + "," + final1, LoggerSeverity.INFO);
-		ProcessLogger.log(longestChain.toString(), LoggerSeverity.INFO);
-		System.out.println();
-		System.out.println();
+//		ProcessLogger.log(longestChain.toString(), LoggerSeverity.INFO);
+//		System.out.println();
+//		System.out.println();
 
 		if (final1 == (final2 + 1) && final2 == (final3 + 1)) {
 			if ((longestChain.size() - 1) > finalBlockchain.size()) {
@@ -439,11 +423,10 @@ public class Node {
 
 				if ((finalBlockchain.size() / 2) > 10) {
 					ProcessLogger.log("Excess of 10 blocks. Log...", LoggerSeverity.INFO);
-					System.out.println(finalBlockchain.toString());
+//					System.out.println(finalBlockchain.toString());
 					logToFile(true);
-					System.out.println(finalBlockchain.toString());
 				}
-
+				ProcessLogger.log("Finalized Blockchain (in memory)= "+finalBlockchain.toString(), LoggerSeverity.INFO);
 				return;
 			}
 			// nothing new to notarize
@@ -456,18 +439,17 @@ public class Node {
 	}
 
 	private static List<Integer> readChainFromFile() {
-		List<Integer> readChain = null;
+		List<Integer> readChain = new ArrayList<Integer>();;
 
 		try (BufferedReader reader = new BufferedReader(new FileReader(blockchainFilePath))) {
 			String line;
 			while ((line = reader.readLine()) != null) {
 				if (line.isEmpty())
-					continue; // Skip empty lines
+					continue;
 
-				line = line.trim(); // Remove leading/trailing whitespace
+				line = line.trim();
 
-				readChain = new ArrayList<Integer>();
-				System.out.println("Line=" + line);
+//				System.out.println("Line=" + line);
 				String[] parts = line.split(" -> "); // [epoch x, ...]
 
 				for (String part : parts) {
@@ -479,13 +461,15 @@ public class Node {
 					}
 				}
 			}
-		} catch (IOException e) {
-			System.err.println("Error reading file: " + e.getMessage());
+		} catch (FileNotFoundException e) {
+			return readChain;
 		} catch (IllegalArgumentException e) {
 			System.err.println(e.getMessage());
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 
-		System.out.println("Chain read from file= " + readChain.toString());
+//		System.out.println("Chain read from file= " + readChain.toString());
 		return readChain;
 	}
 
@@ -495,7 +479,7 @@ public class Node {
 
 		readChain.addAll(finalBlockchain);
 
-		System.out.println("Sending chain= " + readChain.toString());
+//		System.out.println("Sending chain= " + readChain.toString());
 
 		Message m = new Message(nodeId, readChain, blockchain, MessageType.RECOVERY_ANSWER);
 
@@ -509,12 +493,12 @@ public class Node {
 
 			stream.flush();
 
-			ProcessLogger.log("Reconnected to " + nodeAddress, LoggerSeverity.INFO);
+//			ProcessLogger.log("Reconnected to " + nodeAddress, LoggerSeverity.INFO);
 
 			nodeSockets.put(sender, s);
 			nodeStreams.put(sender, stream);
 		} catch (IOException e) {
-			System.out.printf("Could not connect to node with address %s\n", nodeAddress);
+			ProcessLogger.log("Could not connect to node with address "+ nodeAddress, LoggerSeverity.INFO);
 		}
 
 		ProcessLogger.log("Sending recovery answer to node with ID " + sender, LoggerSeverity.INFO);
@@ -559,7 +543,7 @@ public class Node {
 		currentEpoch = calculateEpoch() + recoveryEpochs; // calculates the current epoch and adds aditional recovery
 															// rounds
 
-		System.out.printf("\n\nCalculated epoch %d\n\n", currentEpoch);
+//		System.out.printf("\n\nCalculated epoch %d\n\n", currentEpoch);
 		// calcular o tempo de inicio de scheduler (Incio + numeroR * TempoE)
 
 		long epochDuration = (2 * roudDurationSec) + 1;
@@ -569,18 +553,17 @@ public class Node {
 		LocalTime newStartTime = initialStartTime.plus(totalIncrement);
 		startTime = newStartTime.toString();
 
-		hasRecovered = true;
-
 		recoverLider(currentEpoch);
 
 		// rewrite file
 		boolean append = false;
-		System.out.println("Received final chain= " + finalBlockchain.toString());
+//		System.out.println("Received final chain= " + finalBlockchain.toString());
 		while (finalBlockchain.size() / 2 > 10) {
 			logToFile(append);
 			append = true;// switch to append mode after first write
 		}
-
+		
+		hasRecovered = true;
 		waitForStartTime();
 
 		canProcessMessages = true;
@@ -599,13 +582,6 @@ public class Node {
 		timer.scheduleAtFixedRate(new TimerTask() {
 			@Override
 			public void run() {
-				if (recoveryRequest) {
-					roundsToRecover += recoveryEpochs;
-					recoveryRequest = false;
-				}
-				if (roundsToRecover > 0) {
-					roundsToRecover--;
-				}
 
 				currentEpoch++;
 
