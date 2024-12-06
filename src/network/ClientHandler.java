@@ -66,12 +66,14 @@ class ClientHandler implements Runnable {
 						ProcessLogger.log("Skipping message recovery request (in RECOVERY MODE)", LoggerSeverity.INFO);
 						return;
 					}
+					
 					Node.answerRecovery(m.getSender());
 					return;
 				}
 
 				if (m.getMessageType().equals(MessageType.RECOVERY_ANSWER)) {
 					Node.receiveRecovery(m);
+					return;
 				}
 
 				try {
@@ -89,7 +91,7 @@ class ClientHandler implements Runnable {
 			while (true) {
 				processMessages(); // Processa as mensagens
 				try {
-					Thread.sleep(100); // Pausa de 100ms entre cada ciclo de processamento
+					Thread.sleep(50); // Pausa de 100ms entre cada ciclo de processamento
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}

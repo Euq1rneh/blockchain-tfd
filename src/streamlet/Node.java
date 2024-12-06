@@ -85,8 +85,9 @@ public class Node {
 	}
 
 	private static void recoverLider(int numberOfRounds) {
+		System.out.println("Lider for round " + (numberOfRounds + 1));
 		for (int i = 0; i < numberOfRounds; i++) {
-			rd.nextInt();
+			System.out.printf("Lider for round %d is %d\n", i, rd.nextInt(100)); 
 		}
 	}
 
@@ -238,16 +239,18 @@ public class Node {
 		ProcessLogger.log("Electing new Lider (available nodes " + nodeStreams.size() + ")...", LoggerSeverity.INFO);
 
 		if (currentEpoch < confusionStart || currentEpoch >= (confusionStart + confusionDuration - 1)) {
-			int index = rd.nextInt(100) % nodeStreams.size();
+			int index = rd.nextInt(100) % allNodes.size();
 
-			int[] keyArray = nodeStreams.keySet().stream().mapToInt(Integer::intValue).toArray();
+			System.out.println("Index="+index);
+			
+			int[] keyArray = allNodes.keySet().stream().mapToInt(Integer::intValue).toArray();
 
 			currentLider = keyArray[index];
 		} else {
-			int[] keyArray = nodeStreams.keySet().stream().mapToInt(Integer::intValue).toArray();
+			int[] keyArray = allNodes.keySet().stream().mapToInt(Integer::intValue).toArray();
 			currentLider = keyArray[currentEpoch % nodeStreams.size()];
 			// Consume random
-			rd.nextInt();
+			rd.nextInt(100);
 		}
 		ProcessLogger.log("New Lider is " + currentLider, LoggerSeverity.INFO);
 
@@ -273,9 +276,9 @@ public class Node {
 			// retrieve block from a list of already processed blocks
 			Block parent = blockchain.findBlock(parentEpoch);
 			// set transactions
-			Random rd = new Random();
-			int receiverId = rd.nextInt() % nodeSockets.size();
-			int tAmount = rd.nextInt() * 15;
+			Random rand = new Random();
+			int receiverId = rand.nextInt() % nodeSockets.size();
+			int tAmount = rand.nextInt() * 15;
 
 			Transaction[] transactions = new Transaction[1];
 			transactions[0] = new Transaction(nodeId, receiverId, tAmount);
@@ -526,8 +529,10 @@ public class Node {
 		LocalTime now = LocalTime.now();
 		long secondsElapsed = java.time.Duration.between(time, now).getSeconds();
 
-		int epochDuration = (roudDurationSec * 2) + 1;
+		long epochDuration = (roudDurationSec * 2) + 1;
 
+		System.out.println("Seconds elapsed= "+ secondsElapsed);
+		System.out.println("Calculated epoch= " + (int) (secondsElapsed / epochDuration));
 		return (int) (secondsElapsed / epochDuration);
 	}
 
@@ -542,6 +547,9 @@ public class Node {
 		blockchain = m.getBlockchain();
 		currentEpoch = calculateEpoch() + recoveryEpochs; // calculates the current epoch and adds aditional recovery
 															// rounds
+		
+		System.out.println("Epoch + recovery=" + currentEpoch);
+		System.out.println("Starting on epoch=" + (currentEpoch+1));
 
 //		System.out.printf("\n\nCalculated epoch %d\n\n", currentEpoch);
 		// calcular o tempo de inicio de scheduler (Incio + numeroR * TempoE)
@@ -612,6 +620,8 @@ public class Node {
 			return;
 		}
 
+		System.out.println("Seed=" + seed);
+		
 		rd = new Random(seed);
 
 		Block genesisBlock = new Block(0, 0, null, null, null);
