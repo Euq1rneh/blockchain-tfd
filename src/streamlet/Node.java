@@ -85,9 +85,8 @@ public class Node {
 	}
 
 	private static void recoverLider(int numberOfRounds) {
-		System.out.println("Lider for round " + (numberOfRounds + 1));
 		for (int i = 0; i < numberOfRounds; i++) {
-			System.out.printf("Lider for round %d is %d\n", i, rd.nextInt(100)); 
+			rd.nextInt(100); 
 		}
 	}
 
@@ -120,7 +119,7 @@ public class Node {
 		File file = new File(nodesFile);
 
 		if (!file.exists()) {
-			System.out.println("No config file was found with name " + nodesFile);
+			ProcessLogger.log("No config file was found with name " + nodesFile, LoggerSeverity.INFO);
 			return false;
 		}
 
@@ -139,7 +138,7 @@ public class Node {
 
 			}
 		} catch (IOException e) {
-			System.out.println("Error trying to read nodes file");
+			ProcessLogger.log("Error trying to read nodes file", LoggerSeverity.INFO);
 			return false;
 		} catch (NumberFormatException e) {
 			e.printStackTrace();
@@ -151,7 +150,7 @@ public class Node {
 		File file = new File(configFile);
 
 		if (!file.exists()) {
-			System.out.println("No config file was found with name " + configFile);
+			ProcessLogger.log("No config file was found with name " + configFile, LoggerSeverity.INFO);
 			return false;
 		}
 
@@ -185,7 +184,7 @@ public class Node {
 				}
 			}
 		} catch (IOException e) {
-			System.out.println("Error trying to read config file");
+			ProcessLogger.log("Error trying to read config file", LoggerSeverity.INFO);
 			return false;
 		} catch (NumberFormatException e) {
 			// TODO Auto-generated catch block
@@ -236,12 +235,10 @@ public class Node {
 	}
 
 	public static int electLider() {
-		ProcessLogger.log("Electing new Lider (available nodes " + nodeStreams.size() + ")...", LoggerSeverity.INFO);
+		ProcessLogger.log("Electing new Lider...", LoggerSeverity.INFO);
 
 		if (currentEpoch < confusionStart || currentEpoch >= (confusionStart + confusionDuration - 1)) {
 			int index = rd.nextInt(100) % allNodes.size();
-
-			System.out.println("Index="+index);
 			
 			int[] keyArray = allNodes.keySet().stream().mapToInt(Integer::intValue).toArray();
 
@@ -265,7 +262,6 @@ public class Node {
 		} else {
 			List<Integer> longestChain = blockchain.findLongestPath();
 			int parentChainSize = longestChain.size();
-//			int parentChainSize = notarizedChain.size();
 
 			int parentEpoch = 0; // the index of the last block in the parent chain
 
@@ -292,9 +288,7 @@ public class Node {
 			for (Map.Entry<Integer, ObjectOutputStream> entry : nodeStreams.entrySet()) {
 				ProcessLogger.log("Sending message to node with ID " + entry.getKey(), LoggerSeverity.INFO);
 				ObjectOutputStream stream = entry.getValue();
-
 				bm.send(m, stream);
-
 			}
 		}
 	}
@@ -352,7 +346,6 @@ public class Node {
 		currentBlockToVote.notarize();
 
 		BlockChain parentChain = currentBlockToVote.getBlockChain();
-
 		int parent = currentBlockToVote.getParentBlockEpoch();
 
 		blockchain.union(parentChain);
@@ -361,7 +354,6 @@ public class Node {
 		ProcessLogger.log("Blockchain State\n" + blockchain.toString(), LoggerSeverity.INFO);
 
 		votesForBlock.remove(currentBlockToVote.getEpoch());// no longer need to collect votes for block
-
 		finalizeBlockchain();
 	}
 
@@ -409,12 +401,7 @@ public class Node {
 		index--;
 		int final3 = longestChain.get(index); // 1
 
-//		System.out.println();
-//		System.out.println();
 		ProcessLogger.log("Last 3 blocks: " + final3 + "," + final2 + "," + final1, LoggerSeverity.INFO);
-//		ProcessLogger.log(longestChain.toString(), LoggerSeverity.INFO);
-//		System.out.println();
-//		System.out.println();
 
 		if (final1 == (final2 + 1) && final2 == (final3 + 1)) {
 			if ((longestChain.size() - 1) > finalBlockchain.size()) {
@@ -449,11 +436,9 @@ public class Node {
 			while ((line = reader.readLine()) != null) {
 				if (line.isEmpty())
 					continue;
-
+				
 				line = line.trim();
-
-//				System.out.println("Line=" + line);
-				String[] parts = line.split(" -> "); // [epoch x, ...]
+				String[] parts = line.split(" -> ");
 
 				for (String part : parts) {
 					String[] subParts = part.split(" ");
@@ -472,7 +457,6 @@ public class Node {
 			e.printStackTrace();
 		}
 
-//		System.out.println("Chain read from file= " + readChain.toString());
 		return readChain;
 	}
 
@@ -481,8 +465,6 @@ public class Node {
 		List<Integer> readChain = readChainFromFile();
 
 		readChain.addAll(finalBlockchain);
-
-//		System.out.println("Sending chain= " + readChain.toString());
 
 		Message m = new Message(nodeId, readChain, blockchain, MessageType.RECOVERY_ANSWER);
 
@@ -495,8 +477,6 @@ public class Node {
 			ObjectOutputStream stream = new ObjectOutputStream(s.getOutputStream());
 
 			stream.flush();
-
-//			ProcessLogger.log("Reconnected to " + nodeAddress, LoggerSeverity.INFO);
 
 			nodeSockets.put(sender, s);
 			nodeStreams.put(sender, stream);
@@ -531,8 +511,7 @@ public class Node {
 
 		long epochDuration = (roudDurationSec * 2) + 1;
 
-		System.out.println("Seconds elapsed= "+ secondsElapsed);
-		System.out.println("Calculated epoch= " + (int) (secondsElapsed / epochDuration));
+		ProcessLogger.log("Calculated epoch= " + (int) (secondsElapsed / epochDuration), LoggerSeverity.INFO);
 		return (int) (secondsElapsed / epochDuration);
 	}
 
@@ -547,11 +526,7 @@ public class Node {
 		blockchain = m.getBlockchain();
 		currentEpoch = calculateEpoch() + recoveryEpochs; // calculates the current epoch and adds aditional recovery
 															// rounds
-		
-		System.out.println("Epoch + recovery=" + currentEpoch);
-		System.out.println("Starting on epoch=" + (currentEpoch+1));
 
-//		System.out.printf("\n\nCalculated epoch %d\n\n", currentEpoch);
 		// calcular o tempo de inicio de scheduler (Incio + numeroR * TempoE)
 
 		long epochDuration = (2 * roudDurationSec) + 1;
@@ -565,7 +540,6 @@ public class Node {
 
 		// rewrite file
 		boolean append = false;
-//		System.out.println("Received final chain= " + finalBlockchain.toString());
 		while (finalBlockchain.size() / 2 > 10) {
 			logToFile(append);
 			append = true;// switch to append mode after first write
@@ -586,7 +560,6 @@ public class Node {
 	private static void epochScheduler() {
 		Timer timer = new Timer();
 
-		// Schedule a task to run each epoch
 		timer.scheduleAtFixedRate(new TimerTask() {
 			@Override
 			public void run() {
@@ -640,7 +613,7 @@ public class Node {
 		Thread serverThread = new Thread(server);
 		serverThread.start();
 
-		System.out.printf("Node ID: %d\n", nodeId);
+		ProcessLogger.log("Node ID: "+ nodeId, LoggerSeverity.INFO);
 
 		if (shouldEnterRecoveryMode()) {
 			canProcessMessages = false;

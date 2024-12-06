@@ -41,7 +41,7 @@ class ClientHandler implements Runnable {
 				}
 			}
 		} catch (EOFException e) {
-			ProcessLogger.log("Node crashed", LoggerSeverity.INFO);
+			ProcessLogger.log("Broken node socket", LoggerSeverity.INFO);
 		} catch (IOException | ClassNotFoundException e) {
 			e.printStackTrace();
 		}
