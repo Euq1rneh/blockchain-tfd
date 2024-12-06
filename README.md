@@ -56,7 +56,11 @@ This will generate a jar file to the `dist` directory. It also increments the st
     Replace `peerFile`, `configFile` with the paths for those files and `peerID` with the appropriate ID contained in your `peerFile`.
 
 > [!NOTE]
-> The value of the configuration parameter `round_duration_sec` should be directly proportional to the value of `confusion_duration`. Otherwise message processing could be cut short for some messages.
+> The value of the configuration parameter `round_duration_sec` should be directly proportional to the value of `confusion_duration`. Otherwise message processing could be cut short for some messages.  
+
+> [!WARNING]
+> The values of the configuration parameters `confusion_start` and `confusion_duration` should always be bigger than `0` if confusion epochs are expected to appear. The combination of `confusion_start=1` and `confusion_duration=1` results in no epochs of confusion
+
 
 ## Shortcommings
 - Phase 1: Nothing to report. All requirements met.
