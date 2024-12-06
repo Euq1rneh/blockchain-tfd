@@ -8,7 +8,9 @@ This project involves implementing a fault-tolerant distributed system using the
 
 The algorithm used works in epochs, an epoch is 2Δ rounds of equal duration. We considered Δ to be the duration of a round.
 
-A logger is used to simplify the debbuging process and a log file is created for each node.
+A logger is used to simplify the debbuging process and a log file is created for each node.  
+
+A text file is created for each node containing part of the blockchain to reduce memory usage. This file is only updated if there is an excess of 10 blocks in memory while trying to finalize a new chain. With this feature the blockchain now is a combination of what's logged into that file and what is in memory.
 
 ## Project Structure
 - **Node**: Each node operates as an independent process that creates, orders, and verifies blocks.
@@ -54,7 +56,7 @@ This will generate a jar file to the `dist` directory. It also increments the st
     Replace `peerFile`, `configFile` with the paths for those files and `peerID` with the appropriate ID contained in your `peerFile`.
 
 > [!NOTE]
-> The value of the configuration parameter `round_duration_sec` should be directly proportional to the value of `confusion_duration`
+> The value of the configuration parameter `round_duration_sec` should be directly proportional to the value of `confusion_duration`. Otherwise message processing could be cut short for some messages.
 
 ## Shortcommings
 - Phase 1: Nothing to report. All requirements met.
